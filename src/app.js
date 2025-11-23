@@ -20,15 +20,16 @@ app.use(express.json());
 
 
 app.use("/api/users", authRoutes); // base path for auth
+app.use("/api/mosques", mosqueRoutes);
 
 // //API routes
 // app.use(express.json());
 // app.use("/api/users", userRoutes);
 // app.use("/api/mosques", mosqueRoutes);
 
-// // Default route
-// app.get('/', (req, res) => {
-//     res.send('Welcome to Manzilah Backend API 🚀');
-// });
+// Default route
+app.get('/', (req, res) => {
+    res.send('Welcome to Manzilah Backend API 🚀');
+});
 
 export default app;
