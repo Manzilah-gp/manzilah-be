@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 
 import authRoutes from "./routes/authRoutes.js";
 // import userRoutes from "./routes/userRoutes.js";
-// import mosqueRoutes from "./routes/mosqueRoutes.js";
+import mosqueRoutes from "./routes/mosqueRoutes.js";
 
 dotenv.config();
 

@@ -12,12 +12,14 @@ import { verifyToken, checkRole } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// All routes are protected and require ministry_admin role
+// ✅ PUBLIC READ ROUTES - Any authenticated user can fetch mosques
+router.get("/", getMosques);
+router.get("/search", verifyToken, searchMosques);
+router.get("/governorate/:governorate", getMosquesByGovernorate);
+router.get("/:id", verifyToken, getMosqueById);
+
+// ✅ PROTECTED WRITE ROUTES - Only ministry_admin can modify
 router.post("/", verifyToken, checkRole(["ministry_admin"]), createMosque);
-router.get("/", verifyToken, checkRole(["ministry_admin"]), getMosques);
-router.get("/search", verifyToken, checkRole(["ministry_admin"]), searchMosques);
-router.get("/governorate/:governorate", verifyToken, checkRole(["ministry_admin"]), getMosquesByGovernorate);
-router.get("/:id", verifyToken, checkRole(["ministry_admin"]), getMosqueById);
 router.put("/:id", verifyToken, checkRole(["ministry_admin"]), updateMosque);
 router.delete("/:id", verifyToken, checkRole(["ministry_admin"]), deleteMosque);
 
