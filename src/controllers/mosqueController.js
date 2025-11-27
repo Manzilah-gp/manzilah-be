@@ -92,9 +92,52 @@ export const getMosqueById = async (req, res) => {
     }
 };
 
+// export const updateMosque = async (req, res) => {
+//     const mosqueId = req.params.id;
+//     const { mosque, location } = req.body;
+
+//     try {
+//         // Check if mosque exists
+//         const mosqueExists = await MosqueModel.exists(mosqueId);
+//         if (!mosqueExists) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Mosque not found"
+//             });
+//         }
+
+//         // Update mosque data if provided
+//         if (mosque) {
+//             await MosqueModel.update(mosqueId, mosque);
+//         }
+
+//         // Update location data if provided
+//         if (location) {
+//             await MosqueModel.updateLocation(mosqueId, location);
+//         }
+
+//         res.json({
+//             success: true,
+//             message: "Mosque updated successfully",
+//             mosqueId: mosqueId
+//         });
+
+//     } catch (error) {
+//         console.error("Error updating mosque:", error);
+//         res.status(500).json({
+//             success: false,
+//             message: "Database error",
+//             error: error.message
+//         });
+//     }
+// };
+
 export const updateMosque = async (req, res) => {
     const mosqueId = req.params.id;
-    const { mosque, location } = req.body;
+    const updateData = req.body; // FIXED: Changed from { mosque, location } to updateData
+
+    console.log('Update request for mosque ID:', mosqueId);
+    console.log('Update data received:', updateData);
 
     try {
         // Check if mosque exists
@@ -106,20 +149,53 @@ export const updateMosque = async (req, res) => {
             });
         }
 
+        // FIXED: Handle different data structures
+        let mosqueUpdate = {};
+        let locationUpdate = {};
+
+        // Check if data is in the old structure { mosque: {}, location: {} }
+        if (updateData.mosque && updateData.location) {
+            mosqueUpdate = updateData.mosque;
+            locationUpdate = updateData.location;
+        } else {
+            // Assume flat structure with all fields
+            mosqueUpdate = {
+                name: updateData.name,
+                contact_number: updateData.contact_number,
+                mosque_admin_id: updateData.mosque_admin_id
+            };
+
+            locationUpdate = {
+                latitude: updateData.latitude,
+                longitude: updateData.longitude,
+                address: updateData.address,
+                region: updateData.region,
+                governorate: updateData.governorate,
+                postal_code: updateData.postal_code
+            };
+        }
+
+        console.log('Processing mosque update:', mosqueUpdate);
+        console.log('Processing location update:', locationUpdate);
+
         // Update mosque data if provided
-        if (mosque) {
-            await MosqueModel.update(mosqueId, mosque);
+        if (mosqueUpdate && Object.keys(mosqueUpdate).length > 0) {
+            await MosqueModel.update(mosqueId, mosqueUpdate);
         }
 
         // Update location data if provided
-        if (location) {
-            await MosqueModel.updateLocation(mosqueId, location);
+        if (locationUpdate && (locationUpdate.latitude || locationUpdate.longitude)) {
+            await MosqueModel.updateLocation(mosqueId, locationUpdate);
         }
+
+        // Get updated mosque data to return
+        const updatedMosque = await MosqueModel.findById(mosqueId);
 
         res.json({
             success: true,
             message: "Mosque updated successfully",
-            mosqueId: mosqueId
+            mosqueId: mosqueId,
+            data: updatedMosque
         });
 
     } catch (error) {

@@ -50,51 +50,55 @@ export const MosqueModel = {
         }
     },
 
-    // ✅ Get all mosques with minimal info (for dropdowns)
+
     async findAll() {
         const [mosques] = await db.execute(`
-            SELECT 
-                m.id,
-                m.name,
-                m.contact_number,
-                ml.governorate,
-                ml.region,
-                ml.address
-            FROM MOSQUE m
-            LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
-            ORDER BY m.name ASC
-        `);
+        SELECT 
+            m.id,
+            m.name,
+            m.contact_number,
+            ml.governorate,
+            ml.region,
+            ml.address,
+            u.full_name as admin_name
+        FROM MOSQUE m
+        LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
+        LEFT JOIN USER u ON m.mosque_admin_id = u.id
+        ORDER BY m.name ASC
+    `);
         return mosques;
     },
 
-    // ✅ Find mosque by ID with full details
+
     async findById(mosqueId) {
         const [mosques] = await db.execute(`
-            SELECT 
-                m.id,
-                m.name,
-                m.contact_number,
-                m.mosque_admin_id,
-                m.created_by,
-                m.created_at,
-                ml.latitude,
-                ml.longitude,
-                ml.address,
-                ml.region,
-                ml.governorate,
-                ml.postal_code,
-                u.full_name as admin_name
-            FROM MOSQUE m
-            LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
-            LEFT JOIN USER u ON m.mosque_admin_id = u.id
-            WHERE m.id = ?
-        `, [mosqueId]);
+        SELECT 
+            m.id,
+            m.name,
+            m.contact_number,
+            m.mosque_admin_id,
+            m.created_by,
+            m.created_at,
+            ml.latitude,
+            ml.longitude,
+            ml.address,
+            ml.region,
+            ml.governorate,
+            ml.postal_code,
+            u.full_name as admin_name
+        FROM MOSQUE m
+        LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
+        LEFT JOIN USER u ON m.mosque_admin_id = u.id
+        WHERE m.id = ?
+    `, [mosqueId]);
 
         return mosques.length > 0 ? mosques[0] : null;
     },
 
-    // ✅ Update mosque information
+    // ✅ Update mosque information - FIXED
     async update(mosqueId, mosqueData) {
+        console.log('Updating mosque with ID:', mosqueId, 'Data:', mosqueData);
+
         const [result] = await db.execute(
             `UPDATE MOSQUE 
              SET name = ?, contact_number = ?, mosque_admin_id = ?
@@ -106,25 +110,42 @@ export const MosqueModel = {
                 mosqueId
             ]
         );
+
+        console.log('Mosque update result:', result);
         return result;
     },
 
-    // ✅ Update mosque location
+    // ✅ Update mosque location - FIXED
     async updateLocation(mosqueId, locationData) {
-        const [result] = await db.execute(
-            `UPDATE MOSQUE_LOCATION 
-             SET latitude = ?, longitude = ?, address = ?, region = ?, governorate = ?, postal_code = ?
-             WHERE mosque_id = ?`,
-            [
-                parseFloat(locationData.latitude),
-                parseFloat(locationData.longitude),
-                locationData.address || '',
-                locationData.region || '',
-                locationData.governorate || '',
-                locationData.postal_code || '',
-                mosqueId
-            ]
+        console.log('Updating location for mosque ID:', mosqueId, 'Data:', locationData);
+
+        // Check if location exists for this mosque
+        const [existingLocation] = await db.execute(
+            "SELECT id FROM MOSQUE_LOCATION WHERE mosque_id = ?",
+            [mosqueId]
         );
+
+        let result;
+
+        if (existingLocation.length > 0) {
+            // Update existing location
+            [result] = await db.execute(
+                `UPDATE MOSQUE_LOCATION 
+                 SET latitude = ?, longitude = ?, address = ?, region = ?, governorate = ?, postal_code = ?
+                 WHERE mosque_id = ?`,
+                [
+                    parseFloat(locationData.latitude),
+                    parseFloat(locationData.longitude),
+                    locationData.address || '',
+                    locationData.region || '',
+                    locationData.governorate || '',
+                    locationData.postal_code || '',
+                    mosqueId
+                ]
+            );
+        }
+
+        console.log('Location update result:', result);
         return result;
     },
 

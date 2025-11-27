@@ -29,7 +29,7 @@ export const register = async (req, res) => {
         date_of_birth, // Frontend sends 'date_of_birth'
         gender,
         address,
-        roles = ["student"]
+        roles = []
     } = req.body;
 
     // Map frontend field names to database field names
