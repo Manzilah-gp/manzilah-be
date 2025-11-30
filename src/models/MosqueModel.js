@@ -2,6 +2,42 @@
 import db from "../config/db.js";
 
 export const MosqueModel = {
+
+    async assignMosqueAdmin(mosqueId, mosqueData, createdBy, connection) {
+
+        if (!mosqueData.mosque_admin_id) return;
+
+
+        await connection.execute(
+            `INSERT INTO ROLE_ASSIGNMENT 
+                (user_id, mosque_id, role_id, assigned_by)
+                VALUES (?,?,?,?) `,
+            [
+                mosqueData.mosque_admin_id,
+                mosqueId,
+                2,
+                createdBy
+            ]
+        )
+
+
+    },
+    async updateMosqueAdmin(mosqueId, mosqueData, createdBy, connection) {
+        if (!mosqueData.mosque_admin_id) return;
+
+        await connection.execute(
+            `UPDATE ROLE_ASSIGNMENT
+         SET user_id = ?, assigned_by = ?
+         WHERE role_id = 2 AND mosque_id = ?`,
+            [
+                mosqueData.mosque_admin_id,
+                createdBy,
+                mosqueId
+            ]
+        );
+    }
+    ,
+
     // ✅ Create a new mosque with location (transaction)
     async createWithLocation(mosqueData, locationData, createdBy) {
         const connection = await db.getConnection();
@@ -38,6 +74,8 @@ export const MosqueModel = {
                     locationData.postal_code || ''
                 ]
             );
+
+            await this.assignMosqueAdmin(mosqueId, mosqueData, createdBy, connection);
 
             await connection.commit();
             return mosqueId;
@@ -96,24 +134,35 @@ export const MosqueModel = {
     },
 
     // ✅ Update mosque information - FIXED
-    async update(mosqueId, mosqueData) {
-        console.log('Updating mosque with ID:', mosqueId, 'Data:', mosqueData);
+    async update(mosqueId, mosqueData, createdBy) {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
 
-        const [result] = await db.execute(
-            `UPDATE MOSQUE 
+            await connection.execute(
+                `UPDATE MOSQUE 
              SET name = ?, contact_number = ?, mosque_admin_id = ?
              WHERE id = ?`,
-            [
-                mosqueData.name,
-                mosqueData.contact_number || null,
-                mosqueData.mosque_admin_id || null,
-                mosqueId
-            ]
-        );
+                [
+                    mosqueData.name,
+                    mosqueData.contact_number || null,
+                    mosqueData.mosque_admin_id || null,
+                    mosqueId
+                ]
+            );
 
-        console.log('Mosque update result:', result);
-        return result;
-    },
+            await this.updateMosqueAdmin(connection, mosqueId, mosqueData, createdBy);
+
+            await connection.commit();
+            return { success: true };
+        } catch (err) {
+            await connection.rollback();
+            throw err;
+        } finally {
+            connection.release();
+        }
+    }
+    ,
 
     // ✅ Update mosque location - FIXED
     async updateLocation(mosqueId, locationData) {
