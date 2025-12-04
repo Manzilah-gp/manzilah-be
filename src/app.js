@@ -3,8 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import authRoutes from "./routes/authRoutes.js";
-// import userRoutes from "./routes/userRoutes.js";
 import mosqueRoutes from "./routes/mosqueRoutes.js";
+import profileRoutes from "./routes/profileRoutes.js"; // ✅ ADD THIS
 
 dotenv.config();
 
@@ -18,14 +18,9 @@ app.use(cors({
 
 app.use(express.json());
 
-
 app.use("/api/users", authRoutes); // base path for auth
 app.use("/api/mosques", mosqueRoutes);
-
-// //API routes
-// app.use(express.json());
-// app.use("/api/users", userRoutes);
-// app.use("/api/mosques", mosqueRoutes);
+app.use("/api/profile", profileRoutes); // ✅ ADD THIS LINE
 
 // Default route
 app.get('/', (req, res) => {
