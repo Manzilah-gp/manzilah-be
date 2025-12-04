@@ -221,7 +221,18 @@ export const login = async (req, res) => {
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password_hash);
+        // First try comparing as hashed password
+        let isMatch = await bcrypt.compare(password, user.password_hash);
+
+        // If not matched, check if plain-text password matches
+        if (!isMatch && password === user.password_hash) {
+            // Update the password in DB to hashed version
+            const newHashedPassword = await bcrypt.hash(password, 10);
+            await UserModel.updatePassword(user.id, newHashedPassword);
+            isMatch = true;
+            console.log("✅ Detected plain-text password. Updated to hashed password.");
+        }
+
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid email or password" });
         }

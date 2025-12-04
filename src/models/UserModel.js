@@ -101,6 +101,23 @@ class UserModel {
         );
         return children;
     }
+
+    /**
+     * Update user's password
+     */
+    static async updatePassword(userId, newHashedPassword) {
+        try {
+            const connection = await db.getConnection();
+            await connection.query(
+                "UPDATE USER SET password_hash = ? WHERE id = ?",
+                [newHashedPassword, userId]
+            );
+            connection.release();
+        } catch (err) {
+            console.error("❌ Error updating password:", err);
+            throw err;
+        }
+    }
 }
 
 export default UserModel;
