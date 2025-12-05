@@ -22,8 +22,8 @@ class UserModel {
         const { full_name, email, phone, password_hash, dob, gender } = userData;
 
         const [result] = await db.query(
-            `INSERT INTO USER (full_name, email, phone, password_hash, dob, gender, approved)
-             VALUES (?, ?, ?, ?, ?, ?, FALSE)`,
+            `INSERT INTO USER (full_name, email, phone, password_hash, dob, gender)
+             VALUES (?, ?, ?, ?, ?, ?)`,
             [full_name, email, phone, password_hash, dob, gender]
         );
 

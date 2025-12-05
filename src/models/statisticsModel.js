@@ -79,11 +79,13 @@ export const StatisticsModel = {
      * Includes mosque location and admin information
      */
     async getRecentMosques(limit = 5) {
-        console.log("getRecentMosques called with limit:", limit, "type:", typeof limit);
+        console.log("getRecentMosques called - limit:", limit);
 
         try {
+            // ✅ Validate and convert to integer
+            const limitInt = parseInt(limit, 10);
 
-
+            // ✅ Use string interpolation for LIMIT (safe because we validated it's an integer)
             const [mosques] = await db.execute(`
         SELECT 
             m.id,
@@ -100,15 +102,16 @@ export const StatisticsModel = {
         LEFT JOIN USER u ON m.mosque_admin_id = u.id
         LEFT JOIN USER creator ON m.created_by = creator.id
         ORDER BY m.created_at DESC
-        LIMIT ?
-    `, [limit]);
+        LIMIT ${limitInt}
+    `); // ✅ No parameters needed now
+
+            console.log("Found mosques:", mosques.length);
             return mosques || [];
-        }
-        catch (error) {
+        } catch (error) {
             console.error("Error in getRecentMosques:", error);
             throw error;
         }
-    },
+    },//Error
 
 
     /**
@@ -149,22 +152,19 @@ export const StatisticsModel = {
 
     /**
      * Get the mosque ID that a user administers
-     * Looks up in ROLE_ASSIGNMENT table where user has mosque_admin role
+     * Looks up in Mosque table where user has mosque_admin role
      */
     async getMosqueIdForAdmin(userId) {
         const [rows] = await db.execute(`
-            SELECT ra.mosque_id
-            FROM ROLE_ASSIGNMENT ra
-            JOIN ROLE r ON ra.role_id = r.id
-            WHERE ra.user_id = ? 
-            AND r.name = 'mosque_admin' 
-            AND ra.is_active = TRUE
-            AND ra.mosque_id IS NOT NULL
-            LIMIT 1
+            SELECT id FROM MOSQUE WHERE mosque_admin_id = ?
         `, [userId]);
+        if (rows.length === 0) {
+            return null; // User is not a mosque admin
+        }
 
-        return rows.length > 0 ? rows[0].mosque_id : null;
+        return rows.length > 0 ? rows[0].id : null;
     },
+
 
     /**
      * Get detailed mosque information
@@ -261,8 +261,22 @@ export const StatisticsModel = {
      * Get recent enrollments for a mosque
      * Shows latest students who enrolled with course details
      */
-    async getRecentEnrollmentsByMosque(mosqueId, limit = 10) {
-        const [enrollments] = await db.execute(`
+
+    async getRecentEnrollmentsByMosque(mosqueId, limit = 3) {
+        //console.log("getRecentEnrollmentsByMosque called - mosqueId:", mosqueId, "limit:", limit);
+
+        try {
+            // ✅ Validate and convert to integer
+            const limitInt = parseInt(limit, 10);
+
+            // ✅ Validate mosqueId is a valid number
+            if (!mosqueId || isNaN(mosqueId)) {
+                console.error("Invalid mosqueId:", mosqueId);
+                return [];
+            }
+
+            // ✅ Use string interpolation for LIMIT (safe because we validated it's an integer)
+            const [enrollments] = await db.execute(`
         SELECT 
             e.id,
             e.enrollment_date,
@@ -279,10 +293,17 @@ export const StatisticsModel = {
         LEFT JOIN USER teacher ON e.teacher_id = teacher.id
         WHERE c.mosque_id = ?
         ORDER BY e.enrollment_date DESC
-        LIMIT ?
-    `, [mosqueId, limit]);
-        return enrollments;
+        LIMIT ${limitInt}
+    `, [mosqueId]); // ✅ Only mosqueId as parameter
+
+            console.log("Found enrollments:", enrollments.length);
+            return enrollments || [];
+        } catch (error) {
+            console.error("Error in getRecentEnrollmentsByMosque:", error);
+            throw error;
+        }
     },
+    //Error
 
     /**
      * Get all courses for a specific mosque with enrollment stats

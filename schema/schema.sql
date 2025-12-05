@@ -17,9 +17,7 @@ CREATE TABLE USER (
     dob DATE NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    approved BOOLEAN DEFAULT FALSE,
-    INDEX idx_user_email (email),
-    INDEX idx_user_approved (approved)
+    INDEX idx_user_email (email)
 );
 
 
@@ -48,11 +46,11 @@ CREATE TABLE MOSQUE (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     contact_number VARCHAR(20),
-    mosque_admin_id INT NULL,
+    mosque_admin_id INT NULL UNIQUE,
 	created_by INT NULL ,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES USER(id) ON DELETE SET NULL,
-    FOREIGN KEY (mosque_admin_id) REFERENCES USER(id),
+    FOREIGN KEY (mosque_admin_id) REFERENCES USER(id) ON DELETE SET NULL,
     INDEX idx_mosque_name (name)
 );
 
@@ -220,6 +218,7 @@ CREATE TABLE TEACHER_PREFERRED_MOSQUE (
 CREATE TABLE COURSE (
     id INT AUTO_INCREMENT PRIMARY KEY,
     mosque_id INT NOT NULL,
+    target_gender ENUM('male', 'female') NULL,
     course_type_id INT NOT NULL,
     name VARCHAR(100) NOT NULL,
     description TEXT,
@@ -242,7 +241,8 @@ CREATE TABLE COURSE (
     FOREIGN KEY (course_level) REFERENCES MEMORIZATION_LEVEL(id),
     INDEX idx_course_mosque (mosque_id),
     INDEX idx_course_active (is_active),
-    INDEX idx_course_type (course_type_id)
+    INDEX idx_course_type (course_type_id),
+    INDEX idx_target_gender (target_gender)
 );
 
 CREATE TABLE COURSE_SCHEDULE (

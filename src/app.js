@@ -6,6 +6,8 @@ import authRoutes from "./routes/authRoutes.js";
 // import userRoutes from "./routes/userRoutes.js";
 import mosqueRoutes from "./routes/mosqueRoutes.js";
 import statisticsRoutes from "./routes/statisticsRoutes.js"
+import courseRoutes from "./routes/courseRoutes.js";
+
 
 dotenv.config();
 
@@ -27,6 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/users", authRoutes); // base path for auth
 app.use("/api/mosques", mosqueRoutes);
 app.use("/api/dashboard", statisticsRoutes);
+app.use("/api/courses", courseRoutes);
 
 // Default route
 app.get('/', (req, res) => {
