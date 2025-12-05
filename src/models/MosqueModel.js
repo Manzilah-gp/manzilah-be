@@ -2,6 +2,7 @@
 import db from "../config/db.js";
 
 export const MosqueModel = {
+
     // ✅ Create a new mosque with location (transaction)
     async createWithLocation(mosqueData, locationData, createdBy) {
         const connection = await db.getConnection();
@@ -12,7 +13,8 @@ export const MosqueModel = {
             // Insert into MOSQUE table WITH created_by
             const [mosqueResult] = await connection.execute(
                 `INSERT INTO MOSQUE (name, contact_number, mosque_admin_id, created_by) 
-                 VALUES (?, ?, ?, ?)`,
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE mosque_admin_id = VALUES(mosque_admin_id)`,
                 [
                     mosqueData.name,
                     mosqueData.contact_number || null,
@@ -20,6 +22,8 @@ export const MosqueModel = {
                     createdBy
                 ]
             );
+
+
 
             const mosqueId = mosqueResult.insertId;
 
@@ -96,24 +100,33 @@ export const MosqueModel = {
     },
 
     // ✅ Update mosque information - FIXED
-    async update(mosqueId, mosqueData) {
-        console.log('Updating mosque with ID:', mosqueId, 'Data:', mosqueData);
+    async update(mosqueId, mosqueData, createdBy) {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
 
-        const [result] = await db.execute(
-            `UPDATE MOSQUE 
+            await connection.execute(
+                `UPDATE MOSQUE 
              SET name = ?, contact_number = ?, mosque_admin_id = ?
              WHERE id = ?`,
-            [
-                mosqueData.name,
-                mosqueData.contact_number || null,
-                mosqueData.mosque_admin_id || null,
-                mosqueId
-            ]
-        );
+                [
+                    mosqueData.name,
+                    mosqueData.contact_number || null,
+                    mosqueData.mosque_admin_id || null,
+                    mosqueId
+                ]
+            );
 
-        console.log('Mosque update result:', result);
-        return result;
-    },
+            await connection.commit();
+            return { success: true };
+        } catch (err) {
+            await connection.rollback();
+            throw err;
+        } finally {
+            connection.release();
+        }
+    }
+    ,
 
     // ✅ Update mosque location - FIXED
     async updateLocation(mosqueId, locationData) {

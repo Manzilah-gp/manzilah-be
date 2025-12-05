@@ -22,8 +22,8 @@ class UserModel {
         const { full_name, email, phone, password_hash, dob, gender } = userData;
 
         const [result] = await db.query(
-            `INSERT INTO USER (full_name, email, phone, password_hash, dob, gender, approved)
-             VALUES (?, ?, ?, ?, ?, ?, FALSE)`,
+            `INSERT INTO USER (full_name, email, phone, password_hash, dob, gender)
+             VALUES (?, ?, ?, ?, ?, ?)`,
             [full_name, email, phone, password_hash, dob, gender]
         );
 
@@ -56,7 +56,7 @@ class UserModel {
     /**
      * Assign role to user
      */
-    static async assignRole(userId, roleId, mosqueId = null, isActive = true) {
+    static async assignRole(userId, roleId, mosqueId = null, isActive = false) {
         await db.query(
             "INSERT INTO ROLE_ASSIGNMENT (user_id, role_id, mosque_id, is_active) VALUES (?, ?, ?, ?)",
             [userId, roleId, mosqueId, isActive]

@@ -134,6 +134,7 @@ export const getMosqueById = async (req, res) => {
 
 export const updateMosque = async (req, res) => {
     const mosqueId = req.params.id;
+    const createdBy = req.user.id;
     const updateData = req.body; // FIXED: Changed from { mosque, location } to updateData
 
     console.log('Update request for mosque ID:', mosqueId);
@@ -180,7 +181,7 @@ export const updateMosque = async (req, res) => {
 
         // Update mosque data if provided
         if (mosqueUpdate && Object.keys(mosqueUpdate).length > 0) {
-            await MosqueModel.update(mosqueId, mosqueUpdate);
+            await MosqueModel.update(mosqueId, mosqueUpdate, createdBy);
         }
 
         // Update location data if provided
