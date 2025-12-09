@@ -178,7 +178,7 @@ export const deleteCourse = async (req, res) => {
             return res.status(404).json({ message: "Course not found" });
         }
 
-        const deleted = await CourseModel.delete(id);
+        const deleted = await CourseModel.hardDelete(id);
 
         if (deleted) {
             res.status(200).json({ message: "Course deleted successfully" });
