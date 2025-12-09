@@ -2,20 +2,8 @@ import db from "../config/db.js";
 
 export const TeacherSuggestionModel = {
     /**
-     * Get suggested teachers for a course with match scoring
-     * @param {Object} courseRequirements - Course details for matching
-     * @returns {Array} List of teachers with match scores
+     * Get suggested teachers with simplified matching
      */
-
-    // Later: If to add a warning system for pending teachers later:
-    // In getSuggestedTeachers query, add:
-    // LEFT JOIN TEACHER_CERTIFICATION tc ON u.id = tc.user_id
-    // WHERE tc.status IN ('approved', 'pending')
-
-    // Then in the response, add:
-    // certification_status: tc.status,
-    // show_warning: tc.status === 'pending'
-
     async getSuggestedTeachers(courseRequirements) {
         const {
             mosque_id,
@@ -25,167 +13,177 @@ export const TeacherSuggestionModel = {
             schedule = []
         } = courseRequirements;
 
-        // Step 1: Get all approved teachers with their details
-        const [teachers] = await db.execute(`
-            SELECT 
-                u.id,
-                u.full_name,
-                u.email,
-                u.phone,
-                u.gender,
-                u.dob,
-                -- Teacher certification
-                tc.has_tajweed_certificate,
-                tc.has_sharea_certificate,
-                tc.experience_years,
-                -- Teacher expertise for this course type
-                te.course_type_id,
-                te.max_mem_level_id,
-                te.years_experience,
-                te.hourly_rate_cents,
-                ml.level_name as max_level_name,
-                -- Current workload
-                (SELECT COUNT(*) FROM ENROLLMENT e 
-                 WHERE e.teacher_id = u.id 
-                 AND e.status = 'active') as active_courses_count
-            FROM USER u
-            -- Join with teacher certification (must be approved)
-            INNER JOIN TEACHER_CERTIFICATION tc ON u.id = tc.user_id
-            -- Join with teacher expertise for this course type
-            INNER JOIN TEACHER_EXPERTISE te ON u.id = te.teacher_id 
-                AND te.course_type_id = ?
-            -- Join with role assignment to ensure active teacher role
-            INNER JOIN ROLE_ASSIGNMENT ra ON u.id = ra.user_id
-            -- Join with role table to get teacher role
-            INNER JOIN ROLE r ON ra.role_id = r.id AND r.name = 'teacher'
-            -- Join with memorization level if applicable
-            LEFT JOIN MEMORIZATION_LEVEL ml ON te.max_mem_level_id = ml.id
-            -- Teacher must be approved and active
-            WHERE tc.status = 'approved'
-            AND ra.is_active = TRUE
-            GROUP BY u.id
-        `, [course_type_id]);
+        try {
+            // First, get the mosque's governorate
+            const [mosqueInfo] = await db.execute(`
+                SELECT ml.governorate 
+                FROM MOSQUE m
+                LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
+                WHERE m.id = ?
+            `, [mosque_id]);
 
+            const mosqueGovernorate = mosqueInfo[0]?.governorate || null;
 
+            // Build the base query
+            let query = `
+                SELECT 
+                    u.id,
+                    u.full_name,
+                    u.email,
+                    u.phone,
+                    u.gender,
+                    u.dob,
+                    -- Teacher certification
+                    tc.has_tajweed_certificate,
+                    tc.has_sharea_certificate,
+                    tc.experience_years,
+                    tc.preferred_teaching_format,
+                    -- Teacher expertise for this course type
+                    te.course_type_id,
+                    te.max_mem_level_id,
+                    te.years_experience,
+                    te.hourly_rate_cents,
+                    -- Current workload
+                    (SELECT COUNT(*) FROM ENROLLMENT e 
+                     WHERE e.teacher_id = u.id 
+                     AND e.status = 'active') as active_courses_count
+                FROM USER u
+                INNER JOIN TEACHER_CERTIFICATION tc ON u.id = tc.user_id
+                INNER JOIN TEACHER_EXPERTISE te ON u.id = te.teacher_id 
+                    AND te.course_type_id = ?
+                INNER JOIN ROLE_ASSIGNMENT ra ON u.id = ra.user_id
+                INNER JOIN ROLE r ON ra.role_id = r.id AND r.name = 'teacher'
+                WHERE tc.status = 'approved'
+                AND ra.is_active = TRUE
+            `;
 
-        // Step 2: Get additional details for each teacher
-        const teachersWithDetails = await Promise.all(
-            teachers.map(async (teacher) => {
-                // Get teacher availability
-                const [availability] = await db.execute(`
-                    SELECT * FROM TEACHER_AVAILABILITY 
-                    WHERE teacher_id = ? 
-                    ORDER BY day_of_week, start_time
-                `, [teacher.id]);
+            const params = [course_type_id];
 
-                // Get teacher's preferred mosques
-                const [mosquePreferences] = await db.execute(`
-                    SELECT m.*, ml.governorate 
-                    FROM TEACHER_PREFERRED_MOSQUE tpm
-                    JOIN MOSQUE m ON tpm.mosque_id = m.id
-                    LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
-                    WHERE tpm.teacher_id = ?
-                `, [teacher.id]);
+            // 1. Filter by governorate (MUST requirement)
+            if (mosqueGovernorate) {
+                // Get teachers who prefer this mosque OR teachers without specific mosque preference
+                query += `
+                    AND (
+                        u.id IN (
+                            SELECT teacher_id FROM TEACHER_PREFERRED_MOSQUE tpm
+                            JOIN MOSQUE m ON tpm.mosque_id = m.id
+                            LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
+                            WHERE ml.governorate = ?
+                        )
+                        OR NOT EXISTS (
+                            SELECT 1 FROM TEACHER_PREFERRED_MOSQUE WHERE teacher_id = u.id
+                        )
+                    )
+                `;
+                params.push(mosqueGovernorate);
+            }
 
-                // Get teacher's current courses (for workload details)
-                const [currentCourses] = await db.execute(`
-                    SELECT 
-                        c.name,
-                        m.name as mosque_name,
-                        COUNT(e.id) as student_count
-                    FROM ENROLLMENT e
-                    JOIN COURSE c ON e.course_id = c.id
-                    JOIN MOSQUE m ON c.mosque_id = m.id
-                    WHERE e.teacher_id = ? 
-                    AND e.status = 'active'
-                    GROUP BY c.id
-                `, [teacher.id]);
+            // 2. Filter by gender if specified (MUST requirement for non-mixed)
+            if (target_gender && target_gender !== '') {
+                query += ` AND u.gender = ?`;
+                params.push(target_gender);
+            }
 
-                // Calculate match score
-                const matchDetails = this.calculateMatchScore(
-                    teacher,
-                    courseRequirements,
-                    { availability, mosquePreferences, currentCourses }
-                );
+            const [teachers] = await db.execute(query, params);
 
-                return {
-                    ...teacher,
-                    availability,
-                    mosque_preferences: mosquePreferences,
-                    current_courses: currentCourses,
-                    match_details: matchDetails.details,
-                    match_score: matchDetails.totalScore,
-                    recommendation_level: this.getRecommendationLevel(matchDetails.totalScore)
-                };
-            })
-        );
+            // Step 2: Get additional details and calculate scores
+            const teachersWithDetails = await Promise.all(
+                teachers.map(async (teacher) => {
+                    // Get teacher availability
+                    const [availability] = await db.execute(`
+                        SELECT * FROM TEACHER_AVAILABILITY 
+                        WHERE teacher_id = ? 
+                        ORDER BY day_of_week, start_time
+                    `, [teacher.id]);
 
-        // Step 3: Sort by match score (highest first)
-        return teachersWithDetails.sort((a, b) => b.match_score - a.match_score);
+                    // Calculate match score (0-100)
+                    const matchDetails = this.calculateSimpleMatchScore(
+                        teacher,
+                        courseRequirements,
+                        { availability }
+                    );
+
+                    return {
+                        ...teacher,
+                        availability,
+                        match_details: matchDetails.details,
+                        match_score: matchDetails.totalScore,
+                        recommendation_level: this.getRecommendationLevel(matchDetails.totalScore)
+                    };
+                })
+            );
+
+            // Step 3: Filter teachers with available times if schedule is specified
+            let filteredTeachers = teachersWithDetails;
+
+            if (schedule && schedule.length > 0) {
+                filteredTeachers = teachersWithDetails.filter(teacher => {
+                    // 3. Check schedule availability (MUST requirement)
+                    const hasAvailableTimes = this.hasAvailableTimes(teacher.availability, schedule);
+                    return hasAvailableTimes;
+                });
+            }
+
+            // Step 4: Sort by match score (highest first)
+            return filteredTeachers.sort((a, b) => b.match_score - a.match_score);
+
+        } catch (error) {
+            console.error("Error in getSuggestedTeachers:", error);
+            throw error;
+        }
     },
 
     /**
-     * Calculate match score for a teacher (0-100)
+     * Simplified match score calculation
+     * MUST requirements: governorate, gender (if specified), schedule availability
+     * BONUS points: certifications, experience, workload
      */
-    calculateMatchScore(teacher, courseReq, additionalData) {
-        const { availability, mosquePreferences, currentCourses } = additionalData;
+    calculateSimpleMatchScore(teacher, courseReq, additionalData) {
+        const { availability } = additionalData;
         let totalScore = 0;
         const details = {};
 
-        // 1. Gender Match (30 points - HIGHEST priority)
-        if (courseReq.target_gender === null) {
-            // Mixed course - no gender restriction
-            details.gender_match = true;
-            totalScore += 30;
-        } else {
-            details.gender_match = teacher.gender === courseReq.target_gender;
-            totalScore += details.gender_match ? 30 : -50; // Heavy penalty for mismatch
-        }
+        // MUST requirements are already filtered out, these are bonuses
 
-        // 2. Expertise Match (20 points)
-        details.expertise_match = teacher.course_type_id === courseReq.course_type_id;
-        totalScore += details.expertise_match ? 20 : 0;
+        // 1. Governorate match (Already filtered, but give points for preference match)
+        details.governorate_match = true; // Already passed filter
 
-        // 3. Memorization Level Capability (20 points)
-        if (courseReq.course_type_id === 1 && courseReq.course_level) { // Memorization course
-            details.level_match = teacher.max_mem_level_id >= courseReq.course_level;
-            totalScore += details.level_match ? 20 : 0;
-        } else {
-            details.level_match = null; // Not applicable
-        }
+        // 2. Gender match (Already filtered, but give points)
+        details.gender_match = !courseReq.target_gender ||
+            courseReq.target_gender === '' ||
+            teacher.gender === courseReq.target_gender;
 
-        // 4. Schedule Availability (15 points)
+        // 3. Schedule availability bonus (0-30 points)
         if (courseReq.schedule && courseReq.schedule.length > 0) {
-            details.schedule_match = this.checkScheduleMatch(availability, courseReq.schedule);
-            totalScore += details.schedule_match === 'full' ? 15 :
-                details.schedule_match === 'partial' ? 8 : 0;
-        } else {
-            details.schedule_match = null; // No schedule specified
+            const availabilityMatch = this.checkSimpleScheduleMatch(availability, courseReq.schedule);
+            details.schedule_match = availabilityMatch.quality;
+            totalScore += availabilityMatch.score;
         }
 
-        // 5. Mosque Preference (10 points)
-        details.mosque_preference_match = mosquePreferences.some(
-            mosque => mosque.id === courseReq.mosque_id
-        );
-        totalScore += details.mosque_preference_match ? 10 : 0;
-
-        // 6. Current Workload (5 points)
-        details.workload_score = this.calculateWorkloadScore(teacher.active_courses_count);
-        details.workload_status = this.getWorkloadStatus(teacher.active_courses_count);
-        totalScore += details.workload_score;
-
-        // 7. Years of Experience (5 points max)
-        details.experience_bonus = Math.min(teacher.experience_years || 0, 5);
-        totalScore += details.experience_bonus;
-
-        // 8. Certification Bonus (5 points max)
+        // 4. Certification bonus (0-20 points)
         details.certification_bonus = 0;
         if (teacher.has_tajweed_certificate && teacher.has_sharea_certificate) {
-            details.certification_bonus = 5;
+            details.certification_bonus = 20;
         } else if (teacher.has_tajweed_certificate || teacher.has_sharea_certificate) {
-            details.certification_bonus = 3;
+            details.certification_bonus = 10;
         }
         totalScore += details.certification_bonus;
+
+        // 5. Experience bonus (0-25 points)
+        details.experience_bonus = Math.min(Math.floor((teacher.experience_years || 0) * 2), 25);
+        totalScore += details.experience_bonus;
+
+        // 6. Workload bonus (0-15 points) - Teachers with fewer active courses get higher score
+        details.workload_bonus = Math.max(0, 15 - (teacher.active_courses_count * 3));
+        totalScore += details.workload_bonus;
+
+        // 7. Preferred format match (0-10 points)
+        if (courseReq.schedule_type && teacher.preferred_teaching_format) {
+            details.format_match = teacher.preferred_teaching_format === courseReq.schedule_type;
+            if (details.format_match) {
+                totalScore += 10;
+            }
+        }
 
         // Cap score at 100
         totalScore = Math.min(Math.max(totalScore, 0), 100);
@@ -194,12 +192,14 @@ export const TeacherSuggestionModel = {
     },
 
     /**
-     * Check if teacher's availability matches course schedule
+     * Check if teacher has available times for the course schedule
      */
-    checkScheduleMatch(teacherAvailability, courseSchedule) {
-        if (teacherAvailability.length === 0) return 'none';
+    hasAvailableTimes(teacherAvailability, courseSchedule) {
+        if (!teacherAvailability || teacherAvailability.length === 0) {
+            return false; // No availability data means not available
+        }
 
-        let matches = 0;
+        // Check each course time slot
         for (const courseSlot of courseSchedule) {
             const hasMatch = teacherAvailability.some(teacherSlot =>
                 teacherSlot.day_of_week === courseSlot.day_of_week &&
@@ -208,77 +208,95 @@ export const TeacherSuggestionModel = {
                     courseSlot.start_time, courseSlot.end_time
                 )
             );
-            if (hasMatch) matches++;
+
+            if (!hasMatch) {
+                return false; // Missing a required time slot
+            }
         }
 
-        if (matches === courseSchedule.length) return 'full';
-        if (matches > 0) return 'partial';
-        return 'none';
+        return true; // All required time slots are available
     },
 
     /**
-     * Check if two time slots overlap
+     * Check schedule match quality for scoring
      */
+    checkSimpleScheduleMatch(teacherAvailability, courseSchedule) {
+        if (!teacherAvailability || teacherAvailability.length === 0) {
+            return { quality: 'none', score: 0 };
+        }
+
+        let perfectMatches = 0;
+        let partialMatches = 0;
+
+        for (const courseSlot of courseSchedule) {
+            let matchQuality = 'none';
+
+            teacherAvailability.forEach(teacherSlot => {
+                if (teacherSlot.day_of_week === courseSlot.day_of_week) {
+                    if (teacherSlot.start_time <= courseSlot.start_time &&
+                        teacherSlot.end_time >= courseSlot.end_time) {
+                        matchQuality = 'perfect';
+                    } else if (this.timeOverlaps(
+                        teacherSlot.start_time, teacherSlot.end_time,
+                        courseSlot.start_time, courseSlot.end_time
+                    )) {
+                        matchQuality = 'partial';
+                    }
+                }
+            });
+
+            if (matchQuality === 'perfect') perfectMatches++;
+            else if (matchQuality === 'partial') partialMatches++;
+        }
+
+        const totalSlots = courseSchedule.length;
+        let score = 0;
+        let quality = 'none';
+
+        if (perfectMatches === totalSlots) {
+            score = 30;
+            quality = 'perfect';
+        } else if (perfectMatches > 0 || partialMatches > 0) {
+            score = (perfectMatches * 15) + (partialMatches * 10);
+            quality = 'partial';
+        }
+
+        return { quality, score };
+    },
+
     timeOverlaps(start1, end1, start2, end2) {
         const s1 = this.timeToMinutes(start1);
         const e1 = this.timeToMinutes(end1);
         const s2 = this.timeToMinutes(start2);
         const e2 = this.timeToMinutes(end2);
-
         return s1 < e2 && s2 < e1;
     },
 
-    /**
-     * Convert HH:MM:SS to minutes
-     */
     timeToMinutes(time) {
         const [hours, minutes] = time.split(':').map(Number);
         return hours * 60 + minutes;
     },
 
-    /**
-     * Calculate workload score (5 points max)
-     */
-    calculateWorkloadScore(activeCourses) {
-        if (activeCourses >= 3) return 0;       // Maxed out
-        if (activeCourses === 2) return 1;      // Light load
-        if (activeCourses === 1) return 3;      // Moderate load
-        return 5;                               // Available
-    },
-
-    /**
-     * Get workload status label
-     */
-    getWorkloadStatus(activeCourses) {
-        if (activeCourses >= 3) return 'full';
-        if (activeCourses === 2) return 'moderate';
-        if (activeCourses === 1) return 'light';
-        return 'available';
-    },
-
-    /**
-     * Get recommendation level based on score
-     */
     getRecommendationLevel(score) {
         if (score >= 80) return 'highly_recommended';
         if (score >= 60) return 'recommended';
         if (score >= 40) return 'suitable';
-        return 'not_recommended';
-    },
-
-    /**
-     * Simple: Get mosque ID for mosque admin (1-1 relationship)
-     */
-    async getMosqueIdForAdmin(userId) {
-        const [rows] = await db.execute(
-            'SELECT id FROM MOSQUE WHERE mosque_admin_id = ?',
-            [userId]
-        );
-
-        if (rows.length === 0) {
-            throw new Error('User is not a mosque admin or mosque not found');
-        }
-
-        return rows[0].id;
+        return 'available'; // changed from 'not_recommended'
     }
 };
+
+/**
+ * 
+ how can we make the suggestion simpler ?
+maube like this:
+1.governorate -> is a must 
+2.gender-> is a must to match only when not mix gender selected 
+3. available times 
+aprroved and available times and certification and experienced -> advantages but not necessary (extra points ) 
+recommendation will show from high to low 
+
+when the first three matches a teacher put them to the list 
+if could be simpler do it 
+
+and do not forget the backend also
+ */

@@ -11,13 +11,14 @@ export const CourseModel = {
             // Insert course
             const [courseResult] = await connection.execute(
                 `INSERT INTO COURSE 
-                 (mosque_id, target_gender, course_type_id, name, description, course_format, 
+                 (mosque_id, teacher_id, target_gender, course_type_id, name, description, course_format, 
                  difficulty_level, price_cents, duration_weeks, total_sessions, 
                  max_students, schedule_type, target_age_group, course_level, 
                  created_by, is_active) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     courseData.mosque_id,
+                    courseData.teacher_id || null,
                     courseData.target_gender || null,
                     courseData.course_type_id,
                     courseData.name,
@@ -29,7 +30,7 @@ export const CourseModel = {
                     courseData.total_sessions || null,
                     courseData.max_students || null,
                     courseData.schedule_type || 'onsite',
-                    JSON.stringify(courseData.target_age_group || []),
+                    courseData.target_age_group || 'all',
                     courseData.course_level || null,
                     createdBy,
                     courseData.is_active !== undefined ? courseData.is_active : true
@@ -95,11 +96,7 @@ export const CourseModel = {
             ORDER BY c.created_at DESC
         `, [mosqueId]);
 
-        // Parse JSON fields
-        return courses.map(course => ({
-            ...course,
-            target_age_group: JSON.parse(course.target_age_group || '[]')
-        }));
+        return courses;
     },
 
     // ✅ Get course by ID with full details including schedule
@@ -114,12 +111,15 @@ export const CourseModel = {
                 ml.juz_range_end,
                 m.name as mosque_name,
                 u.full_name as created_by_name,
+                u2.full_name as teacher_name,
                 (SELECT COUNT(*) FROM ENROLLMENT WHERE course_id = c.id AND status = 'active') as enrolled_students
             FROM COURSE c
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             JOIN MOSQUE m ON c.mosque_id = m.id
             JOIN USER u ON c.created_by = u.id
             LEFT JOIN MEMORIZATION_LEVEL ml ON c.course_level = ml.id
+            LEFT JOIN USER u2 ON c.teacher_id = u2.id
+            
             WHERE c.id = ?
         `, [courseId]);
 
@@ -135,7 +135,6 @@ export const CourseModel = {
         // Parse JSON and attach schedule
         return {
             ...course,
-            target_age_group: JSON.parse(course.target_age_group || '[]'),
             schedule: schedules
         };
     },
@@ -154,7 +153,8 @@ export const CourseModel = {
             const allowedFields = [
                 'name', 'description', 'course_format', 'difficulty_level',
                 'price_cents', 'duration_weeks', 'total_sessions', 'max_students',
-                'schedule_type', 'course_level', 'is_active', 'target_gender'
+                'schedule_type', 'course_level', 'is_active', 'target_gender',
+                'teacher_id', 'target_age_group'
             ];
 
             allowedFields.forEach(field => {
@@ -164,11 +164,6 @@ export const CourseModel = {
                 }
             });
 
-            // Handle JSON fields separately
-            if (courseData.target_age_group !== undefined) {
-                updateFields.push('target_age_group = ?');
-                updateValues.push(JSON.stringify(courseData.target_age_group));
-            }
 
             if (updateFields.length > 0) {
                 updateValues.push(courseId);
@@ -220,8 +215,8 @@ export const CourseModel = {
     async assignTeacher(courseId, teacherId, assignedBy) {
         // Create a course assignment record or update enrollment
         const [result] = await db.execute(
-            `UPDATE COURSE SET updated_at = NOW() WHERE id = ?`,
-            [courseId]
+            `UPDATE COURSE SET updated_at = NOW() , teacher_id = ? WHERE id = ?`,
+            [teacherId, courseId]
         );
 
         // You might want to create a separate COURSE_TEACHER table for this
