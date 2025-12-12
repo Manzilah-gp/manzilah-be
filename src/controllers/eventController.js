@@ -127,10 +127,26 @@ export const getEvents = async (req, res) => {
 
         const params = [userId, userId];
 
-        // CRITICAL FIX: Ministry admin sees ALL events, others see only approved
-        if (!isMinistryAdmin) {
-            query += " AND e.approval_status = 'approved'";
-        }
+        // Check if user is mosque admin
+const [mosqueAdminRole] = await db.query(
+    "SELECT mosque_id FROM ROLE_ASSIGNMENT WHERE user_id = ? AND role_id = (SELECT id FROM ROLE WHERE name = 'mosque_admin') AND is_active = TRUE",
+    [userId]
+);
+const isMosqueAdmin = mosqueAdminRole && mosqueAdminRole.length > 0;
+
+// Ministry admin sees ALL events
+// Mosque admin sees approved events + their own mosque's rejected events
+// Regular users see only approved events
+if (!isMinistryAdmin) {
+    if (isMosqueAdmin) {
+        // Mosque admin sees approved + their mosque's rejected events
+        query += " AND (e.approval_status = 'approved' OR (e.approval_status = 'rejected' AND e.mosque_id = ?))";
+        params.push(mosqueAdminRole[0].mosque_id);
+    } else {
+        // Regular users see only approved
+        query += " AND e.approval_status = 'approved'";
+    }
+}
 
         // Apply my_mosque filter
         if (filter === 'my_mosque') {
@@ -290,12 +306,18 @@ export const getEventById = async (req, res) => {
 /**
  * Update event
  * Mosque admin only, can only update their mosque's events
+ * UPDATED: Allows resetting approval_status for resubmission
  */
 export const updateEvent = async (req, res) => {
     try {
         const eventId = req.params.id;
         const userId = req.user.id;
         const updates = req.body;
+
+        console.log('=== UPDATE EVENT ===');
+        console.log('Event ID:', eventId);
+        console.log('User ID:', userId);
+        console.log('Updates:', updates);
 
         // Check if user owns this event
         const [event] = await db.query(`
@@ -314,6 +336,9 @@ export const updateEvent = async (req, res) => {
             });
         }
 
+        console.log('Event found:', event[0].title);
+        console.log('Current status:', event[0].approval_status);
+
         // Build update query
         const fields = [];
         const values = [];
@@ -330,11 +355,11 @@ export const updateEvent = async (req, res) => {
             fields.push('event_date = ?');
             values.push(updates.event_date);
         }
-        if (updates.event_time) {
+        if (updates.event_time !== undefined) {
             fields.push('event_time = ?');
             values.push(updates.event_time);
         }
-        if (updates.location) {
+        if (updates.location !== undefined) {
             fields.push('location = ?');
             values.push(updates.location);
         }
@@ -342,17 +367,54 @@ export const updateEvent = async (req, res) => {
             fields.push('status = ?');
             values.push(updates.status);
         }
+        if (updates.event_type) {
+            fields.push('event_type = ?');
+            values.push(updates.event_type);
+        }
+
+        // IMPORTANT: Allow updating approval_status (for resubmission)
+        if (updates.approval_status) {
+            fields.push('approval_status = ?');
+            values.push(updates.approval_status);
+            
+            // Clear rejection reason when resubmitting
+            if (updates.approval_status === 'pending') {
+                fields.push('rejection_reason = NULL');
+            }
+        }
+
+        if (fields.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No fields to update'
+            });
+        }
 
         values.push(eventId);
 
-        await db.query(
-            `UPDATE EVENT SET ${fields.join(', ')} WHERE id = ?`,
-            values
+        const query = `UPDATE EVENT SET ${fields.join(', ')} WHERE id = ?`;
+        console.log('Update query:', query);
+        console.log('Values:', values);
+
+        const [result] = await db.query(query, values);
+
+        console.log('Update result:', {
+            affectedRows: result.affectedRows,
+            changedRows: result.changedRows
+        });
+
+        // Get updated event
+        const [updatedEvent] = await db.query(
+            'SELECT id, title, approval_status, event_type FROM EVENT WHERE id = ?',
+            [eventId]
         );
+
+        console.log('Updated event:', updatedEvent[0]);
 
         res.json({
             success: true,
-            message: 'Event updated successfully'
+            message: 'Event updated successfully',
+            event: updatedEvent[0]
         });
 
     } catch (error) {
