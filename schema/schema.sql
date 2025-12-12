@@ -121,23 +121,23 @@ CREATE TABLE TEACHER_CERTIFICATION (
     has_sharea_certificate BOOLEAN DEFAULT FALSE,
     tajweed_certificate_url VARCHAR(500),
     sharea_certificate_url VARCHAR(500),
-    additional_qualifications JSON,
-    experience_years INT DEFAULT 0,
-    previous_mosques JSON,
-    preferred_teaching_format ENUM('online', 'onsite', 'hybrid') DEFAULT 'onsite',
-   student_age_preference JSON,
-   hourly_rate_cents INT DEFAULT 0,
-    auto_approval_score INT DEFAULT 0,
-    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-    reviewed_by INT NULL,
-    reviewed_at DATETIME NULL,
-    review_notes TEXT,
+    -- additional_qualifications JSON,
+    -- experience_years INT DEFAULT 0,
+    -- previous_mosques JSON,
+    -- preferred_teaching_format ENUM('online', 'onsite', 'hybrid') DEFAULT 'onsite',
+--    student_age_preference JSON,
+--    hourly_rate_cents INT DEFAULT 0,
+    -- auto_approval_score INT DEFAULT 0,
+    -- status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    -- reviewed_by INT NULL,
+    -- reviewed_at DATETIME NULL,
+    -- review_notes TEXT,
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE,
-    FOREIGN KEY (reviewed_by) REFERENCES USER(id),
-    INDEX idx_teacher_status (status),
+    -- FOREIGN KEY (reviewed_by) REFERENCES USER(id),
+    -- INDEX idx_teacher_status (status),
     INDEX idx_teacher_user (user_id),
-    INDEX idx_auto_score (auto_approval_score)
+    -- INDEX idx_auto_score (auto_approval_score)
 );
 
 CREATE TABLE COURSE_TYPE (
@@ -200,15 +200,15 @@ CREATE TABLE TEACHER_AVAILABILITY (
     INDEX idx_teacher_availability (teacher_id, day_of_week)
 );
 
-CREATE TABLE TEACHER_PREFERRED_MOSQUE (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    teacher_id INT NOT NULL,
-    mosque_id INT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (teacher_id) REFERENCES USER(id) ON DELETE CASCADE,
-    FOREIGN KEY (mosque_id) REFERENCES MOSQUE(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_teacher_mosque (teacher_id, mosque_id)
-);
+-- CREATE TABLE TEACHER_PREFERRED_MOSQUE (
+--     id INT AUTO_INCREMENT PRIMARY KEY,
+--     teacher_id INT NOT NULL,
+--     mosque_id INT NOT NULL,
+--     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+--     FOREIGN KEY (teacher_id) REFERENCES USER(id) ON DELETE CASCADE,
+--     FOREIGN KEY (mosque_id) REFERENCES MOSQUE(id) ON DELETE CASCADE,
+--     UNIQUE KEY unique_teacher_mosque (teacher_id, mosque_id)
+-- );
 
 
 -- ======================================

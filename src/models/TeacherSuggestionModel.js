@@ -3,6 +3,15 @@ import db from "../config/db.js";
 export const TeacherSuggestionModel = {
     /**
      * Get suggested teachers with simplified matching
+     * Matching criteria:
+     * 1. Mosque (Must have active/approved role assignment in this mosque)
+     * 2. Gender (Must match if specified)
+     * 3. Availability (Must match schedule)
+     * 
+     * Ranking:
+     * - Certification
+     * - Experience
+     * - Workload
      */
     async getSuggestedTeachers(courseRequirements) {
         const {
@@ -14,17 +23,8 @@ export const TeacherSuggestionModel = {
         } = courseRequirements;
 
         try {
-            // First, get the mosque's governorate
-            const [mosqueInfo] = await db.execute(`
-                SELECT ml.governorate 
-                FROM MOSQUE m
-                LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
-                WHERE m.id = ?
-            `, [mosque_id]);
-
-            const mosqueGovernorate = mosqueInfo[0]?.governorate || null;
-
             // Build the base query
+            // We join ROLE_ASSIGNMENT to find teachers assigned to this specific mosque
             let query = `
                 SELECT 
                     u.id,
@@ -36,8 +36,6 @@ export const TeacherSuggestionModel = {
                     -- Teacher certification
                     tc.has_tajweed_certificate,
                     tc.has_sharea_certificate,
-                    tc.experience_years,
-                    tc.preferred_teaching_format,
                     -- Teacher expertise for this course type
                     te.course_type_id,
                     te.max_mem_level_id,
@@ -53,32 +51,13 @@ export const TeacherSuggestionModel = {
                     AND te.course_type_id = ?
                 INNER JOIN ROLE_ASSIGNMENT ra ON u.id = ra.user_id
                 INNER JOIN ROLE r ON ra.role_id = r.id AND r.name = 'teacher'
-                WHERE tc.status = 'approved'
+                WHERE ra.mosque_id = ?
                 AND ra.is_active = TRUE
             `;
 
-            const params = [course_type_id];
+            const params = [course_type_id, mosque_id];
 
-            // 1. Filter by governorate (MUST requirement)
-            if (mosqueGovernorate) {
-                // Get teachers who prefer this mosque OR teachers without specific mosque preference
-                query += `
-                    AND (
-                        u.id IN (
-                            SELECT teacher_id FROM TEACHER_PREFERRED_MOSQUE tpm
-                            JOIN MOSQUE m ON tpm.mosque_id = m.id
-                            LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
-                            WHERE ml.governorate = ?
-                        )
-                        OR NOT EXISTS (
-                            SELECT 1 FROM TEACHER_PREFERRED_MOSQUE WHERE teacher_id = u.id
-                        )
-                    )
-                `;
-                params.push(mosqueGovernorate);
-            }
-
-            // 2. Filter by gender if specified (MUST requirement for non-mixed)
+            // 1. Filter by gender if specified (MUST requirement for non-mixed)
             if (target_gender && target_gender !== '') {
                 query += ` AND u.gender = ?`;
                 params.push(target_gender);
@@ -135,7 +114,7 @@ export const TeacherSuggestionModel = {
 
     /**
      * Simplified match score calculation
-     * MUST requirements: governorate, gender (if specified), schedule availability
+     * MUST requirements: mosque, gender (if specified), schedule availability
      * BONUS points: certifications, experience, workload
      */
     calculateSimpleMatchScore(teacher, courseReq, additionalData) {
@@ -145,13 +124,11 @@ export const TeacherSuggestionModel = {
 
         // MUST requirements are already filtered out, these are bonuses
 
-        // 1. Governorate match (Already filtered, but give points for preference match)
-        details.governorate_match = true; // Already passed filter
+        // 1. Mosque match (Already filtered)
+        details.mosque_match = true;
 
-        // 2. Gender match (Already filtered, but give points)
-        details.gender_match = !courseReq.target_gender ||
-            courseReq.target_gender === '' ||
-            teacher.gender === courseReq.target_gender;
+        // 2. Gender match (Already filtered)
+        details.gender_match = true;
 
         // 3. Schedule availability bonus (0-30 points)
         if (courseReq.schedule && courseReq.schedule.length > 0) {
@@ -170,20 +147,12 @@ export const TeacherSuggestionModel = {
         totalScore += details.certification_bonus;
 
         // 5. Experience bonus (0-25 points)
-        details.experience_bonus = Math.min(Math.floor((teacher.experience_years || 0) * 2), 25);
+        details.experience_bonus = Math.min(Math.floor((teacher.years_experience || 0) * 2), 25);
         totalScore += details.experience_bonus;
 
         // 6. Workload bonus (0-15 points) - Teachers with fewer active courses get higher score
         details.workload_bonus = Math.max(0, 15 - (teacher.active_courses_count * 3));
         totalScore += details.workload_bonus;
-
-        // 7. Preferred format match (0-10 points)
-        if (courseReq.schedule_type && teacher.preferred_teaching_format) {
-            details.format_match = teacher.preferred_teaching_format === courseReq.schedule_type;
-            if (details.format_match) {
-                totalScore += 10;
-            }
-        }
 
         // Cap score at 100
         totalScore = Math.min(Math.max(totalScore, 0), 100);
@@ -281,22 +250,6 @@ export const TeacherSuggestionModel = {
         if (score >= 80) return 'highly_recommended';
         if (score >= 60) return 'recommended';
         if (score >= 40) return 'suitable';
-        return 'available'; // changed from 'not_recommended'
+        return 'available';
     }
 };
-
-/**
- * 
- how can we make the suggestion simpler ?
-maube like this:
-1.governorate -> is a must 
-2.gender-> is a must to match only when not mix gender selected 
-3. available times 
-aprroved and available times and certification and experienced -> advantages but not necessary (extra points ) 
-recommendation will show from high to low 
-
-when the first three matches a teacher put them to the list 
-if could be simpler do it 
-
-and do not forget the backend also
- */
