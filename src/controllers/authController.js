@@ -105,7 +105,6 @@ export const register = async (req, res) => {
  */
 export const registerTeacher = async (req, res) => {
     console.log("👨‍🏫 Teacher registration route hit");
-    console.log("Received data:", JSON.stringify(req.body, null, 2));
 
     const {
         full_name,
@@ -178,9 +177,9 @@ export const registerTeacher = async (req, res) => {
             await TeacherModel.addAvailability(userId, availability);
         }
 
-        // Insert preferred mosques
+        // Insert mosques
         if (preferred_mosques && preferred_mosques.length > 0) {
-            await TeacherModel.addPreferredMosques(userId, preferred_mosques);
+            await TeacherModel.assignToMosques(userId, preferred_mosques);
         }
 
         await connection.commit();

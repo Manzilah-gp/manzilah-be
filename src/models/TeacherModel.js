@@ -12,22 +12,14 @@ class TeacherModel {
             `INSERT INTO TEACHER_CERTIFICATION 
              (user_id, has_tajweed_certificate, has_sharea_certificate, 
               tajweed_certificate_url, sharea_certificate_url, 
-              additional_qualifications, experience_years, previous_mosques,
-              preferred_teaching_format, student_age_preference, 
-              hourly_rate_cents, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+              submitted_at)
+             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
             [
                 userId,
                 certification.has_tajweed_certificate || false,
                 certification.has_sharea_certificate || false,
                 certification.tajweed_certificate_url || null,
-                certification.sharea_certificate_url || null,
-                JSON.stringify(certification.additional_qualifications || {}),
-                certification.experience_years || 0,
-                JSON.stringify(certification.previous_mosques || []),
-                certification.preferred_teaching_format || 'onsite',
-                JSON.stringify(certification.student_age_preference || []),
-                certification.hourly_rate_cents || 0
+                certification.sharea_certificate_url || null
             ]
         );
         return result.insertId;
@@ -79,14 +71,22 @@ class TeacherModel {
     }
 
     /**
-     * Add preferred mosques
+     * Assign teacher to mosques (Create pending role assignments)
+     * Role ID 3 = Teacher
      */
-    static async addPreferredMosques(teacherId, mosqueIds) {
-        const values = mosqueIds.map(mosqueId => [teacherId, mosqueId]);
+    static async assignToMosques(teacherId, mosqueIds) {
+        // Create a role assignment for each mosque selected
+        // user_id, role_id (3 for teacher), mosque_id, is_approved (FALSE initially)
+        const values = mosqueIds.map(mosqueId => [
+            teacherId,
+            3,
+            mosqueId,
+            false // is_active = FALSE
+        ]);
 
         if (values.length > 0) {
             await db.query(
-                `INSERT INTO TEACHER_PREFERRED_MOSQUE (teacher_id, mosque_id)
+                `INSERT INTO ROLE_ASSIGNMENT (user_id, role_id, mosque_id, is_active)
                  VALUES ?`,
                 [values]
             );
