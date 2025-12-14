@@ -959,3 +959,52 @@ export const getEventInteractions = async (req, res) => {
         });
     }
 };
+// Function to add the Events marked (going)to the user calender
+export const getUserCalendarEvents = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        console.log('========================================');
+        console.log('=== GET USER CALENDAR EVENTS ===');
+        console.log('User ID:', userId);
+
+        const [events] = await db.query(`
+            SELECT 
+                e.id,
+                e.title,
+                e.description,
+                e.event_date,
+                e.event_time,
+                e.location,
+                e.event_type,
+                m.name as mosque_name
+            FROM EVENT e
+            JOIN MOSQUE m ON e.mosque_id = m.id
+            JOIN EVENT_RSVP er ON er.event_id = e.id
+            WHERE er.user_id = ?
+              AND er.status = 'going'
+              AND e.approval_status = 'approved'
+            ORDER BY e.event_date ASC
+        `, [userId]);
+
+        console.log('Events found:', events.length);
+        if (events.length > 0) {
+            console.log('First event:', events[0]);
+        }
+        console.log('========================================');
+
+        res.json({
+            success: true,
+            count: events.length,
+            events: events
+        });
+
+    } catch (error) {
+        console.error('Error fetching calendar events:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching calendar events',
+            error: error.message
+        });
+    }
+};
