@@ -315,7 +315,6 @@ export const StatisticsModel = {
                 c.id,
                 c.name,
                 c.course_format,
-                c.difficulty_level,
                 c.is_active,
                 c.price_cents,
                 c.duration_weeks,

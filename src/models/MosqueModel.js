@@ -220,5 +220,14 @@ export const MosqueModel = {
         `, [`%${searchTerm}%`]);
 
         return mosques;
+    },
+
+    // ✅ Get Mosque ID by Admin ID
+    async findByAdminId(adminId) {
+        const [rows] = await db.execute(
+            "SELECT id FROM MOSQUE WHERE mosque_admin_id = ?",
+            [adminId]
+        );
+        return rows.length > 0 ? rows[0].id : null;
     }
 };
