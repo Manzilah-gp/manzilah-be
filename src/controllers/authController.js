@@ -152,10 +152,10 @@ export const registerTeacher = async (req, res) => {
         });
 
         // Assign teacher role (inactive until approved)
-        const teacherRole = await UserModel.getRoleByName('teacher');
-        if (teacherRole) {
-            await UserModel.assignRole(userId, teacherRole.id, null, false);
-        }
+        // const teacherRole = await UserModel.getRoleByName('teacher');
+        // if (teacherRole) {
+        //     await UserModel.assignRole(userId, teacherRole.id, null, false);
+        // }
 
         // Insert location
         if (address) {

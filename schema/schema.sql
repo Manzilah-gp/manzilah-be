@@ -224,7 +224,6 @@ CREATE TABLE COURSE (
     name VARCHAR(100) NOT NULL,
     description TEXT,
     course_format ENUM('short', 'long') NOT NULL,
-    difficulty_level INT NOT NULL, -- References memorization level or custom level
     price_cents INT NOT NULL DEFAULT 0,
     duration_weeks INT,
     total_sessions INT,
@@ -267,19 +266,19 @@ CREATE TABLE ENROLLMENT (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     course_id INT NOT NULL,
-    teacher_id INT NOT NULL,
-    current_level INT DEFAULT 1,
+    -- teacher_id INT NOT NULL,
+    -- current_level INT DEFAULT 1,
     enrollment_date DATE NOT NULL,
     completion_date DATE NULL,
     status ENUM('active', 'completed', 'dropped', 'suspended') DEFAULT 'active',
-    total_paid_cents INT DEFAULT 0,
-    auto_assigned BOOLEAN DEFAULT TRUE,
+    -- total_paid_cents INT DEFAULT 0,
+    -- auto_assigned BOOLEAN DEFAULT TRUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (student_id) REFERENCES USER(id) ON DELETE CASCADE,
     FOREIGN KEY (course_id) REFERENCES COURSE(id) ON DELETE CASCADE,
-    FOREIGN KEY (teacher_id) REFERENCES USER(id),
+    -- FOREIGN KEY (teacher_id) REFERENCES USER(id),
     UNIQUE KEY unique_student_course (student_id, course_id),
-    INDEX idx_enrollment_teacher (teacher_id),
+    -- INDEX idx_enrollment_teacher (teacher_id),
     INDEX idx_enrollment_status (status),
     INDEX idx_enrollment_date (enrollment_date)
 );
@@ -301,17 +300,17 @@ CREATE TABLE ATTENDANCE (
 CREATE TABLE STUDENT_PROGRESS (
     id INT AUTO_INCREMENT PRIMARY KEY,
     enrollment_id INT NOT NULL,
-    level_id INT NOT NULL,
+    -- level_id INT NOT NULL,
     completion_percentage INT DEFAULT 0,
-    last_activity_date DATE,
-    is_level_completed BOOLEAN DEFAULT FALSE,
-    level_completion_date DATE,
+    -- last_activity_date DATE,
+    -- is_level_completed BOOLEAN DEFAULT FALSE,
+    -- level_completion_date DATE,
     teacher_notes TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (enrollment_id) REFERENCES ENROLLMENT(id) ON DELETE CASCADE,
-    FOREIGN KEY (level_id) REFERENCES MEMORIZATION_LEVEL(id),
+    -- FOREIGN KEY (level_id) REFERENCES MEMORIZATION_LEVEL(id),
     UNIQUE KEY unique_progress (enrollment_id, level_id),
-    INDEX idx_completion (is_level_completed)
+    -- INDEX idx_completion (is_level_completed)
 );
 
 -- ======================================
@@ -344,8 +343,8 @@ CREATE TABLE PARENT_CHILD_RELATIONSHIP (
 CREATE TABLE PAYMENT (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    amount_cents INT NOT NULL,
-    currency VARCHAR(10) DEFAULT 'USD',
+    amount_shekel INT NOT NULL,
+    currency VARCHAR(10) DEFAULT 'ILS',
     gateway ENUM('stripe','paypal','local') NOT NULL,
     gateway_charge_id VARCHAR(100),
     status ENUM('pending','completed','failed','refunded') DEFAULT 'pending',

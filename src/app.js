@@ -7,6 +7,7 @@ import authRoutes from "./routes/authRoutes.js";
 import mosqueRoutes from "./routes/mosqueRoutes.js";
 import statisticsRoutes from "./routes/statisticsRoutes.js"
 import courseRoutes from "./routes/courseRoutes.js";
+import teacherManagementRoutes from "./routes/teacherManagementRoutes.js";
 
 
 dotenv.config();
@@ -30,6 +31,7 @@ app.use("/api/users", authRoutes); // base path for auth
 app.use("/api/mosques", mosqueRoutes);
 app.use("/api/dashboard", statisticsRoutes);
 app.use("/api/courses", courseRoutes);
+app.use("/api/teachers", teacherManagementRoutes);
 
 // Default route
 app.get('/', (req, res) => {

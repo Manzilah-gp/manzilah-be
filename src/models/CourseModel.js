@@ -12,10 +12,10 @@ export const CourseModel = {
             const [courseResult] = await connection.execute(
                 `INSERT INTO COURSE 
                  (mosque_id, teacher_id, target_gender, course_type_id, name, description, course_format, 
-                 difficulty_level, price_cents, duration_weeks, total_sessions, 
+                 price_cents, duration_weeks, total_sessions, 
                  max_students, schedule_type, target_age_group, course_level, 
                  created_by, is_active) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     courseData.mosque_id,
                     courseData.teacher_id || null,
@@ -24,7 +24,6 @@ export const CourseModel = {
                     courseData.name,
                     courseData.description || '',
                     courseData.course_format,
-                    courseData.difficulty_level || 1,
                     courseData.price_cents || 0,
                     courseData.duration_weeks || null,
                     courseData.total_sessions || null,
@@ -76,7 +75,6 @@ export const CourseModel = {
                 c.name,
                 c.description,
                 c.course_format,
-                c.difficulty_level,
                 c.price_cents,
                 c.duration_weeks,
                 c.total_sessions,
@@ -151,7 +149,7 @@ export const CourseModel = {
             const updateValues = [];
 
             const allowedFields = [
-                'name', 'description', 'course_format', 'difficulty_level',
+                'name', 'description', 'course_format',
                 'price_cents', 'duration_weeks', 'total_sessions', 'max_students',
                 'schedule_type', 'course_level', 'is_active', 'target_gender',
                 'teacher_id', 'target_age_group'
