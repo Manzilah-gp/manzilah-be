@@ -8,7 +8,8 @@ import mosqueRoutes from "./routes/mosqueRoutes.js";
 import statisticsRoutes from "./routes/statisticsRoutes.js"
 import courseRoutes from "./routes/courseRoutes.js";
 import teacherManagementRoutes from "./routes/teacherManagementRoutes.js";
-
+import publicBrowsingRoutes from "./routes/publicBrowsingRoutes.js";
+import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 
 dotenv.config();
 
@@ -32,6 +33,9 @@ app.use("/api/mosques", mosqueRoutes);
 app.use("/api/dashboard", statisticsRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/teachers", teacherManagementRoutes);
+app.use("/api/public", publicBrowsingRoutes);
+app.use("/api/enrollment", enrollmentRoutes);
+
 
 // Default route
 app.get('/', (req, res) => {
