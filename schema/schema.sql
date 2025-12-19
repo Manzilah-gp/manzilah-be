@@ -121,23 +121,9 @@ CREATE TABLE TEACHER_CERTIFICATION (
     has_sharea_certificate BOOLEAN DEFAULT FALSE,
     tajweed_certificate_url VARCHAR(500),
     sharea_certificate_url VARCHAR(500),
-    -- additional_qualifications JSON,
-    -- experience_years INT DEFAULT 0,
-    -- previous_mosques JSON,
-    -- preferred_teaching_format ENUM('online', 'onsite', 'hybrid') DEFAULT 'onsite',
---    student_age_preference JSON,
---    hourly_rate_cents INT DEFAULT 0,
-    -- auto_approval_score INT DEFAULT 0,
-    -- status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-    -- reviewed_by INT NULL,
-    -- reviewed_at DATETIME NULL,
-    -- review_notes TEXT,
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE,
-    -- FOREIGN KEY (reviewed_by) REFERENCES USER(id),
-    -- INDEX idx_teacher_status (status),
     INDEX idx_teacher_user (user_id),
-    -- INDEX idx_auto_score (auto_approval_score)
 );
 
 CREATE TABLE COURSE_TYPE (
@@ -200,16 +186,6 @@ CREATE TABLE TEACHER_AVAILABILITY (
     INDEX idx_teacher_availability (teacher_id, day_of_week)
 );
 
--- CREATE TABLE TEACHER_PREFERRED_MOSQUE (
---     id INT AUTO_INCREMENT PRIMARY KEY,
---     teacher_id INT NOT NULL,
---     mosque_id INT NOT NULL,
---     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
---     FOREIGN KEY (teacher_id) REFERENCES USER(id) ON DELETE CASCADE,
---     FOREIGN KEY (mosque_id) REFERENCES MOSQUE(id) ON DELETE CASCADE,
---     UNIQUE KEY unique_teacher_mosque (teacher_id, mosque_id)
--- );
-
 
 -- ======================================
 -- 4. COURSE MANAGEMENT
@@ -235,6 +211,11 @@ CREATE TABLE COURSE (
     created_by INT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    enrollment_deadline DATE NULL COMMENT 'Last date students can enroll',
+    course_start_date DATE NULL COMMENT 'When course begins',
+    course_end_date DATE NULL COMMENT 'When course ends',
+    online_meeting_url VARCHAR(500) NULL COMMENT 'Jitsi/Daily room URL',
+    is_online_enabled BOOLEAN DEFAULT FALSE COMMENT 'If true, course has online sessions',
     FOREIGN KEY (teacher_id) REFERENCES USER(id) ON DELETE SET NULL,
     FOREIGN KEY (mosque_id) REFERENCES MOSQUE(id) ON DELETE CASCADE,
     FOREIGN KEY (course_type_id) REFERENCES COURSE_TYPE(id),
@@ -244,7 +225,9 @@ CREATE TABLE COURSE (
     INDEX idx_course_mosque (mosque_id),
     INDEX idx_course_active (is_active),
     INDEX idx_course_type (course_type_id),
-    INDEX idx_target_gender (target_gender)
+    INDEX idx_target_gender (target_gender),
+    INDEX idx_enrollment_deadline (enrollment_deadline),
+    INDEX idx_course_dates (course_start_date, course_end_date) 
 );
 
 CREATE TABLE COURSE_SCHEDULE (
@@ -262,27 +245,25 @@ CREATE TABLE COURSE_SCHEDULE (
 -- 5. ENROLLMENT & PROGRESS TRACKING
 -- ======================================
 
+
 CREATE TABLE ENROLLMENT (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     course_id INT NOT NULL,
-    -- teacher_id INT NOT NULL,
-    -- current_level INT DEFAULT 1,
-    enrollment_date DATE NOT NULL,
-    completion_date DATE NULL,
-    status ENUM('active', 'completed', 'dropped', 'suspended') DEFAULT 'active',
-    -- total_paid_cents INT DEFAULT 0,
-    -- auto_assigned BOOLEAN DEFAULT TRUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    status ENUM('active', 'completed', 'dropped') DEFAULT 'active',
+    enrollment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME NULL,
+
     FOREIGN KEY (student_id) REFERENCES USER(id) ON DELETE CASCADE,
     FOREIGN KEY (course_id) REFERENCES COURSE(id) ON DELETE CASCADE,
-    -- FOREIGN KEY (teacher_id) REFERENCES USER(id),
+
     UNIQUE KEY unique_student_course (student_id, course_id),
-    -- INDEX idx_enrollment_teacher (teacher_id),
-    INDEX idx_enrollment_status (status),
-    INDEX idx_enrollment_date (enrollment_date)
+    INDEX idx_enrollment_student (student_id),
+    INDEX idx_enrollment_course (course_id)
 );
 
+-- deleted
 CREATE TABLE ATTENDANCE (
     id INT AUTO_INCREMENT PRIMARY KEY,
     enrollment_id INT NOT NULL,
@@ -300,17 +281,14 @@ CREATE TABLE ATTENDANCE (
 CREATE TABLE STUDENT_PROGRESS (
     id INT AUTO_INCREMENT PRIMARY KEY,
     enrollment_id INT NOT NULL,
-    -- level_id INT NOT NULL,
+
     completion_percentage INT DEFAULT 0,
-    -- last_activity_date DATE,
-    -- is_level_completed BOOLEAN DEFAULT FALSE,
-    -- level_completion_date DATE,
     teacher_notes TEXT,
+
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
     FOREIGN KEY (enrollment_id) REFERENCES ENROLLMENT(id) ON DELETE CASCADE,
-    -- FOREIGN KEY (level_id) REFERENCES MEMORIZATION_LEVEL(id),
-    UNIQUE KEY unique_progress (enrollment_id, level_id),
-    -- INDEX idx_completion (is_level_completed)
+    UNIQUE KEY unique_progress_per_enrollment (enrollment_id)
 );
 
 -- ======================================
@@ -343,18 +321,22 @@ CREATE TABLE PARENT_CHILD_RELATIONSHIP (
 CREATE TABLE PAYMENT (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    amount_shekel INT NOT NULL,
-    currency VARCHAR(10) DEFAULT 'ILS',
+    amount_cents INT NOT NULL,
+    currency VARCHAR(10) DEFAULT 'USD',
     gateway ENUM('stripe','paypal','local') NOT NULL,
     gateway_charge_id VARCHAR(100),
     status ENUM('pending','completed','failed','refunded') DEFAULT 'pending',
     receipt_url VARCHAR(500),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    payment_type ENUM('course', 'donation') NOT NULL DEFAULT 'course' COMMENT 'Type of payment: course enrollment or donation',
+    related_id INT NULL COMMENT 'course_id for course payments, campaign_id for donations',
     FOREIGN KEY (user_id) REFERENCES USER(id),
     INDEX idx_payment_user (user_id),
     INDEX idx_payment_status (status),
-    INDEX idx_payment_created (created_at)
+    INDEX idx_payment_created (created_at),
+    INDEX idx_payment_type (payment_type),
+    INDEX idx_related_id (related_id)
 );
 
 CREATE TABLE DONATION_CAMPAIGN (
@@ -393,6 +375,28 @@ CREATE TABLE DONATION (
     INDEX idx_donation_donor (donor_id)
 );
 
+-- ==================
+-- PAYMENT & ENROLLMENT updates
+-- ==================
+
+
+ALTER TABLE ENROLLMENT 
+ADD COLUMN payment_id INT NULL COMMENT 'Reference to payment record (NULL for free courses)',
+ADD FOREIGN KEY fk_enrollment_payment (payment_id) REFERENCES PAYMENT(id) ON DELETE SET NULL;
+
+
+-- --  Enrollment queries
+CREATE INDEX idx_enrollment_student_status ON ENROLLMENT(student_id, status);
+CREATE INDEX idx_enrollment_course_status ON ENROLLMENT(course_id, status);
+
+-- -- Payment queries
+CREATE INDEX idx_payment_user_type ON PAYMENT(user_id, payment_type);
+
+-- -- Course queries for public browsing
+CREATE INDEX idx_course_active_deadline ON COURSE(is_active, enrollment_deadline);
+CREATE INDEX idx_course_mosque_active ON COURSE(mosque_id, is_active);
+
+
 -- ======================================
 -- 8. EVENTS & COMMUNICATION
 -- ======================================
@@ -418,6 +422,7 @@ CREATE TABLE EVENT (
     INDEX idx_event_status (status)
 );
 
+--deleted
 CREATE TABLE EVALUATION (
     id INT AUTO_INCREMENT PRIMARY KEY,
     evaluator_id INT NOT NULL,
@@ -452,3 +457,276 @@ CREATE TABLE AI_INSIGHTS (
     INDEX idx_insight_user (user_id),
     INDEX idx_insight_type (insight_type)
 );
+
+-- ============================================
+-- 10. Create View for Active Courses
+-- Makes it easy to query enrollable courses
+-- ============================================
+CREATE OR REPLACE VIEW v_active_enrollable_courses AS
+SELECT 
+    c.*,
+    m.name as mosque_name,
+    ml.governorate,
+    ml.region,
+    ct.name as course_type_name,
+    u.full_name as teacher_name,
+    -- Calculate enrolled students
+    (SELECT COUNT(*) FROM ENROLLMENT e 
+     WHERE e.course_id = c.id AND e.status = 'active') as enrolled_count,
+    -- Calculate available spots
+    CASE 
+        WHEN c.max_students IS NULL THEN 999999
+        ELSE c.max_students - (SELECT COUNT(*) FROM ENROLLMENT e 
+                               WHERE e.course_id = c.id AND e.status = 'active')
+    END as available_spots,
+    -- Check if enrollment is still open
+    CASE 
+        WHEN c.enrollment_deadline IS NULL THEN TRUE
+        WHEN c.enrollment_deadline >= CURDATE() THEN TRUE
+        ELSE FALSE
+    END as is_enrollment_open,
+    -- Days until enrollment deadline
+    CASE 
+        WHEN c.enrollment_deadline IS NULL THEN NULL
+        ELSE DATEDIFF(c.enrollment_deadline, CURDATE())
+    END as days_until_deadline
+FROM COURSE c
+JOIN MOSQUE m ON c.mosque_id = m.id
+LEFT JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
+JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
+LEFT JOIN USER u ON c.teacher_id = u.id
+WHERE c.is_active = TRUE
+  AND (c.enrollment_deadline IS NULL OR c.enrollment_deadline >= CURDATE());
+
+
+-- ============================================
+-- 11. Create Function to Check Enrollment Eligibility
+-- Returns detailed eligibility information
+--  INCLUDES: Age and Gender validation
+-- ============================================
+DELIMITER //
+
+CREATE FUNCTION fn_check_enrollment_eligibility (
+    p_student_id INT,
+    p_course_id INT
+)
+RETURNS JSON
+DETERMINISTIC
+BEGIN
+    DECLARE v_student_dob DATE;
+    DECLARE v_student_gender ENUM('male','female');
+    DECLARE v_student_age INT;
+
+    DECLARE v_is_active BOOLEAN;
+    DECLARE v_enrollment_deadline DATE;
+    DECLARE v_max_students INT;
+    DECLARE v_target_gender ENUM('male','female');
+    DECLARE v_target_age_group ENUM('children','teenagers','adults','all');
+    DECLARE v_course_name VARCHAR(100);
+
+    DECLARE v_enrolled_count INT;
+
+    /* ================================
+       1. Load student data
+       ================================ */
+    SELECT dob, gender
+    INTO v_student_dob, v_student_gender
+    FROM USER
+    WHERE id = p_student_id;
+
+
+    IF v_student_dob IS NULL THEN
+        RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Student DOB is missing'));
+    END IF;
+
+    SET v_student_age = TIMESTAMPDIFF(YEAR, v_student_dob, CURDATE());
+
+    /* ================================
+       2. Load course data
+       ================================ */
+    SELECT
+        is_active,
+        enrollment_deadline,
+        max_students,
+        target_gender,
+        target_age_group,
+        name
+    INTO
+        v_is_active,
+        v_enrollment_deadline,
+        v_max_students,
+        v_target_gender,
+        v_target_age_group,
+        v_course_name
+    FROM COURSE
+    WHERE id = p_course_id;
+
+    IF v_is_active IS NULL OR v_is_active = FALSE THEN
+        RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Course is not active'));
+    END IF;
+
+    /* ================================
+       3. Check enrollment deadline
+       ================================ */
+    IF v_enrollment_deadline IS NOT NULL
+       AND v_enrollment_deadline < CURDATE() THEN
+        RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Enrollment deadline has passed'));
+    END IF;
+
+    /* ================================
+       4. Check if already enrolled
+       ================================ */
+    IF EXISTS (
+        SELECT 1
+        FROM ENROLLMENT
+        WHERE student_id = p_student_id
+          AND course_id = p_course_id
+          AND status = 'active'
+    ) THEN
+        RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Already enrolled in this course'));
+    END IF;
+
+    /* ================================
+       5. Capacity check
+       ================================ */
+    IF v_max_students IS NOT NULL THEN
+        SELECT COUNT(*)
+        INTO v_enrolled_count
+        FROM ENROLLMENT
+        WHERE course_id = p_course_id
+          AND status = 'active';
+
+        IF v_enrolled_count >= v_max_students THEN
+            RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Course is full'));
+        END IF;
+    END IF;
+
+    /* ================================
+       6. Gender eligibility
+       ================================ */
+    IF v_target_gender IS NOT NULL
+       AND v_target_gender <> v_student_gender THEN
+        RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY(CONCAT('This course is for ', v_target_gender, 's only')));
+    END IF;
+
+    /* ================================
+       7. Age group eligibility
+       ================================ */
+    IF v_target_age_group <> 'all' THEN
+        IF v_target_age_group = 'children' AND v_student_age >= 13 THEN
+            RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Age check failed: Course is for children (under 13)'));
+        END IF;
+
+        IF v_target_age_group = 'teenagers'
+           AND (v_student_age < 13 OR v_student_age > 18) THEN
+            RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Age check failed: Course is for teenagers (13-18)'));
+        END IF;
+
+        IF v_target_age_group = 'adults' AND v_student_age < 18 THEN
+            RETURN JSON_OBJECT('eligible', FALSE, 'reasons', JSON_ARRAY('Age check failed: Course is for adults (18+)'));
+        END IF;
+    END IF;
+
+    /* ================================
+       Eligible
+       ================================ */
+    RETURN JSON_OBJECT('eligible', TRUE, 'reasons', JSON_ARRAY());
+END//
+
+DELIMITER ;
+
+-- ============================================
+-- 12. Create Stored Procedure for Enrollment
+-- Handles the complete enrollment process
+-- ============================================
+
+
+DELIMITER //
+
+CREATE PROCEDURE sp_enroll_student(
+    IN p_student_id INT,
+    IN p_course_id INT,
+    IN p_payment_id INT,  -- NULL for free courses
+    OUT p_enrollment_id INT,
+    OUT p_error_message VARCHAR(255)
+)
+proc_label: BEGIN
+    DECLARE v_course_price INT;
+    DECLARE v_mosque_id INT;
+    DECLARE v_student_role_id INT;
+    DECLARE v_already_assigned BOOLEAN;
+    DECLARE v_is_online_enabled BOOLEAN;
+    DECLARE v_online_url VARCHAR(500);
+    DECLARE v_eligibility JSON;
+
+    -- Initialize outputs
+    SET p_enrollment_id = NULL;
+    SET p_error_message = NULL;
+
+    -- Start transaction
+    START TRANSACTION;
+
+    -- 1. Eligibility check
+    SET v_eligibility = fn_check_enrollment_eligibility(p_student_id, p_course_id);
+    
+    IF JSON_EXTRACT(v_eligibility, '$.eligible') = FALSE THEN
+        SET p_error_message = JSON_UNQUOTE(JSON_EXTRACT(v_eligibility, '$.reasons[0]'));
+        ROLLBACK;
+        LEAVE proc_label;
+    END IF;
+
+    -- 2. Get course info
+    SELECT price_cents, mosque_id 
+    INTO v_course_price, v_mosque_id
+    FROM COURSE
+    WHERE id = p_course_id;
+
+
+    -- 4. Payment validation for paid courses
+    IF v_course_price > 0 THEN
+        IF p_payment_id IS NULL THEN
+            SET p_error_message = 'Payment required for this course';
+            ROLLBACK;
+            LEAVE proc_label;
+        END IF;
+
+        IF NOT EXISTS(SELECT 1 FROM PAYMENT
+                      WHERE id = p_payment_id
+                        AND user_id = p_student_id
+                        AND status = 'completed') THEN
+            SET p_error_message = 'Invalid or incomplete payment';
+            ROLLBACK;
+            LEAVE proc_label;
+        END IF;
+    END IF;
+
+    -- 5. Create enrollment
+    INSERT INTO ENROLLMENT (student_id, course_id, payment_id, status, enrollment_date)
+    VALUES (p_student_id, p_course_id, p_payment_id, 'active', NOW());
+
+    SET p_enrollment_id = LAST_INSERT_ID();
+
+    -- 6. Create initial progress record
+    INSERT INTO STUDENT_PROGRESS (enrollment_id, completion_percentage)
+    VALUES (p_enrollment_id, 0);
+
+    -- 7. Assign student role to mosque (if not assigned)
+    SELECT id INTO v_student_role_id FROM ROLE WHERE name = 'student';
+
+    SELECT EXISTS(
+        SELECT 1 FROM ROLE_ASSIGNMENT
+        WHERE user_id = p_student_id
+          AND role_id = v_student_role_id
+          AND mosque_id = v_mosque_id
+    ) INTO v_already_assigned;
+
+    -- Create role assignment if not exists
+    IF NOT v_already_assigned THEN
+        INSERT INTO ROLE_ASSIGNMENT (user_id, role_id, mosque_id, is_active, assigned_at)
+        VALUES (p_student_id, v_student_role_id, v_mosque_id, TRUE, NOW());
+    END IF;
+
+    COMMIT;
+END//
+
+DELIMITER ;

@@ -29,7 +29,7 @@ export const register = async (req, res) => {
         date_of_birth, // Frontend sends 'date_of_birth'
         gender,
         address,
-        roles = ["student"]
+        roles = []
     } = req.body;
 
     // Map frontend field names to database field names
@@ -73,7 +73,7 @@ export const register = async (req, res) => {
             await UserModel.createUserLocation(userId, address);
         }
 
-        // Assign roles
+        // Assign roles (if paraent or teacher) parent -> from checkbox
         for (const role_name of roles) {
             const role = await UserModel.getRoleByName(role_name);
             if (role) {
