@@ -10,6 +10,9 @@ import courseRoutes from "./routes/courseRoutes.js";
 import teacherManagementRoutes from "./routes/teacherManagementRoutes.js";
 import publicBrowsingRoutes from "./routes/publicBrowsingRoutes.js";
 import enrollmentRoutes from "./routes/enrollmentRoutes.js";
+import calendarRoutes from "./routes/calendarRoutes.js";
+import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
+
 
 dotenv.config();
 
@@ -35,7 +38,8 @@ app.use("/api/courses", courseRoutes);
 app.use("/api/teachers", teacherManagementRoutes);
 app.use("/api/public", publicBrowsingRoutes);
 app.use("/api/enrollment", enrollmentRoutes);
-
+app.use("/api/calendar", calendarRoutes);
+app.use("/api/student", studentDashboardRoutes);
 
 // Default route
 app.get('/', (req, res) => {
