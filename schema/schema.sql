@@ -730,3 +730,47 @@ proc_label: BEGIN
 END//
 
 DELIMITER ;
+
+
+-- ============================================
+-- Handling events posts page
+-- ============================================
+-- 1. Likes 
+CREATE TABLE EVENT_LIKE (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    user_id INT NOT NULL,
+    FOREIGN KEY (event_id) REFERENCES EVENT(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_event_like (event_id, user_id)
+);
+
+-- 2. RSVPs
+CREATE TABLE EVENT_RSVP (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    user_id INT NOT NULL,
+    status ENUM('going', 'not_going', 'maybe') NOT NULL,
+    FOREIGN KEY (event_id) REFERENCES EVENT(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_event_rsvp (event_id, user_id)
+);
+
+-- 3. Comments
+CREATE TABLE EVENT_COMMENT (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    user_id INT NOT NULL,
+    comment TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES EVENT(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE
+);
+
+-- 4. Add approval field to EVENT table 
+ALTER TABLE EVENT 
+ADD COLUMN approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'approved';
+
+ALTER TABLE EVENT 
+ADD COLUMN rejection_reason TEXT NULL 
+AFTER approval_status;
