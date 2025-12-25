@@ -136,6 +136,8 @@ export const StatisticsModel = {
      * Get system-wide statistics summary
      * Returns counts for mosques, courses, users by role
      */
+
+    // not used !!
     async getSystemSummary() {
         const [rows] = await db.execute(`
             SELECT 
@@ -217,9 +219,8 @@ export const StatisticsModel = {
      */
     async getTeacherCountByMosque(mosqueId) {
         const [rows] = await db.execute(`
-            SELECT COUNT(DISTINCT e.teacher_id) as count
-            FROM ENROLLMENT e
-            JOIN COURSE c ON e.course_id = c.id
+            SELECT COUNT(DISTINCT c.teacher_id) as count
+            FROM COURSE c
             WHERE c.mosque_id = ?
         `, [mosqueId]);
 
@@ -290,7 +291,7 @@ export const StatisticsModel = {
         JOIN USER u ON e.student_id = u.id
         JOIN COURSE c ON e.course_id = c.id
         JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
-        LEFT JOIN USER teacher ON e.teacher_id = teacher.id
+        LEFT JOIN USER teacher ON c.teacher_id = teacher.id
         WHERE c.mosque_id = ?
         ORDER BY e.enrollment_date DESC
         LIMIT ${limitInt}
@@ -379,7 +380,7 @@ export const StatisticsModel = {
                 COUNT(DISTINCT e.student_id) as total_students,
                 COUNT(DISTINCT CASE WHEN e.status = 'active' THEN e.student_id END) as active_students
             FROM ENROLLMENT e
-            WHERE e.teacher_id = ?
+            WHERE c.teacher_id = ?
         `, [teacherId]);
 
         return stats[0];
@@ -401,7 +402,7 @@ export const StatisticsModel = {
             JOIN COURSE c ON e.course_id = c.id
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             JOIN MOSQUE m ON c.mosque_id = m.id
-            WHERE e.teacher_id = ?
+            WHERE c.teacher_id = ?
             GROUP BY c.id
         `, [teacherId]);
 
@@ -447,7 +448,7 @@ export const StatisticsModel = {
             JOIN COURSE c ON e.course_id = c.id
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             JOIN MOSQUE m ON c.mosque_id = m.id
-            LEFT JOIN USER teacher ON e.teacher_id = teacher.id
+            LEFT JOIN USER teacher ON c.teacher_id = teacher.id
             WHERE e.student_id = ?
             ORDER BY e.enrollment_date DESC
         `, [studentId]);
