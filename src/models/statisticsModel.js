@@ -293,6 +293,7 @@ export const StatisticsModel = {
         JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
         LEFT JOIN USER teacher ON c.teacher_id = teacher.id
         WHERE c.mosque_id = ?
+        AND e.status = 'active'
         ORDER BY e.enrollment_date DESC
         LIMIT ${limitInt}
     `, [mosqueId]); // ✅ Only mosqueId as parameter

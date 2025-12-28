@@ -14,8 +14,9 @@ export const CourseModel = {
                  (mosque_id, teacher_id, target_gender, course_type_id, name, description, course_format, 
                  price_cents, duration_weeks, total_sessions, 
                  max_students, schedule_type, target_age_group, course_level, 
-                 created_by, is_active) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 created_by, is_active, 
+                 enrollment_deadline, course_start_date, course_end_date, online_meeting_url, is_online_enabled) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     courseData.mosque_id,
                     courseData.teacher_id || null,
@@ -32,7 +33,12 @@ export const CourseModel = {
                     courseData.target_age_group || 'all',
                     courseData.course_level || null,
                     createdBy,
-                    courseData.is_active !== undefined ? courseData.is_active : true
+                    courseData.is_active !== undefined ? courseData.is_active : true,
+                    courseData.enrollment_deadline || null,
+                    courseData.course_start_date || null,
+                    courseData.course_end_date || null,
+                    courseData.online_meeting_url || null,
+                    courseData.is_online_enabled !== undefined ? courseData.is_online_enabled : false
                 ]
             );
 
@@ -54,6 +60,16 @@ export const CourseModel = {
                         ]
                     );
                 }
+            }
+
+            const generateOnlineMeetingUrl = () => {
+                return `http://localhost:5173/meeting/course_${courseId}`
+            }
+            if (courseData.is_online_enabled) {
+                await connection.execute(
+                    `UPDATE COURSE SET online_meeting_url = ? WHERE id = ?`,
+                    [generateOnlineMeetingUrl(), courseId]
+                );
             }
 
             await connection.commit();
@@ -84,6 +100,11 @@ export const CourseModel = {
                 c.course_level,
                 c.is_active,
                 c.created_at,
+                c.enrollment_deadline,
+                c.course_start_date,
+                c.course_end_date,
+                c.online_meeting_url,
+                c.is_online_enabled,
                 ct.name as course_type,
                 ml.level_name as memorization_level,
                 (SELECT COUNT(*) FROM ENROLLMENT WHERE course_id = c.id AND status = 'active') as enrolled_students
@@ -152,7 +173,9 @@ export const CourseModel = {
                 'name', 'description', 'course_format',
                 'price_cents', 'duration_weeks', 'total_sessions', 'max_students',
                 'schedule_type', 'course_level', 'is_active', 'target_gender',
-                'teacher_id', 'target_age_group'
+                'teacher_id', 'target_age_group',
+                'enrollment_deadline', 'course_start_date', 'course_end_date',
+                'online_meeting_url', 'is_online_enabled'
             ];
 
             allowedFields.forEach(field => {

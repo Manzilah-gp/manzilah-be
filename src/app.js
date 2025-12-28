@@ -12,6 +12,7 @@ import publicBrowsingRoutes from "./routes/publicBrowsingRoutes.js";
 import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 import calendarRoutes from "./routes/calendarRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
+import videoCallRoutes from "./routes/videoCallRoutes.js";
 
 
 dotenv.config();
@@ -40,6 +41,7 @@ app.use("/api/public", publicBrowsingRoutes);
 app.use("/api/enrollment", enrollmentRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
+app.use("/api/video-calls", videoCallRoutes);
 
 // Default route
 app.get('/', (req, res) => {

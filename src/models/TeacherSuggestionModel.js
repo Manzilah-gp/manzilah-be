@@ -41,10 +41,18 @@ export const TeacherSuggestionModel = {
                     te.max_mem_level_id,
                     te.years_experience,
                     te.hourly_rate_cents,
-                    -- Current workload
-                    (SELECT COUNT(*) FROM ENROLLMENT e 
-                     WHERE e.teacher_id = u.id 
-                     AND e.status = 'active') as active_courses_count
+                    -- Current workload: count of active courses
+                    (SELECT COUNT(DISTINCT c.id) 
+                     FROM COURSE c 
+                     WHERE c.teacher_id = u.id 
+                     AND c.is_active = TRUE) as active_courses_count,
+                    -- Current workload: total active students across all courses
+                    (SELECT COUNT(e.id) 
+                     FROM COURSE c 
+                     INNER JOIN ENROLLMENT e ON e.course_id = c.id 
+                     WHERE c.teacher_id = u.id 
+                     AND c.is_active = TRUE 
+                     AND e.status = 'active') as active_students_count
                 FROM USER u
                 INNER JOIN TEACHER_CERTIFICATION tc ON u.id = tc.user_id
                 INNER JOIN TEACHER_EXPERTISE te ON u.id = te.teacher_id 
@@ -150,8 +158,13 @@ export const TeacherSuggestionModel = {
         details.experience_bonus = Math.min(Math.floor((teacher.years_experience || 0) * 2), 25);
         totalScore += details.experience_bonus;
 
-        // 6. Workload bonus (0-15 points) - Teachers with fewer active courses get higher score
-        details.workload_bonus = Math.max(0, 15 - (teacher.active_courses_count * 3));
+        // 6. Workload bonus (0-15 points) - Teachers with fewer active courses and students get higher score
+        // Penalize 2 points per active course and 0.5 points per 5 students
+        const coursesPenalty = (teacher.active_courses_count || 0) * 2;
+        const studentsPenalty = Math.floor((teacher.active_students_count || 0) / 5) * 0.5;
+        details.workload_bonus = Math.max(0, 15 - coursesPenalty - studentsPenalty);
+        details.active_courses = teacher.active_courses_count || 0;
+        details.active_students = teacher.active_students_count || 0;
         totalScore += details.workload_bonus;
 
         // Cap score at 100
