@@ -16,7 +16,10 @@ import {
     deleteComment,
     getEventStats,
     getEventInteractions,
-    getUserCalendarEvents
+    getUserCalendarEvents,
+    getMyMosqueEvents,
+      markEventCompleted  
+
 } from "../controllers/eventController.js";
 
 const router = express.Router();
@@ -25,7 +28,8 @@ const router = express.Router();
 
 // Get all events
 router.get("/", verifyToken, getEvents);
-
+// Mark event as completed
+router.put('/:id/complete', verifyToken, markEventCompleted);
 // ==================== SPECIFIC ROUTES (BEFORE /:id) ====================
 
 // CRITICAL: This route MUST be BEFORE /:id route to prevent 'user' being treated as an ID
@@ -66,6 +70,9 @@ router.put("/:id/approve", verifyToken, checkRole(["ministry_admin"]), approveEv
 router.put("/:id/reject", verifyToken, checkRole(["ministry_admin"]), rejectEvent);
 
 // ==================== GET BY ID MUST BE ABSOLUTE LAST ====================
+
+//mange fundraising evemts
+router.get('/my-mosque-events', verifyToken, getMyMosqueEvents);
 
 
 router.get("/:id", verifyToken, getEventById);

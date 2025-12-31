@@ -7,83 +7,153 @@ import db from "../config/db.js";
  * Fundraising events need ministry approval
  */
 export const createEvent = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const {
-            title,
-            description,
-            event_date,
-            event_time,
-            location,
-            event_type,
-            campaign_id
-        } = req.body;
+  try {
+    const user_id = req.user.id;
+    
+    console.log('📥 Raw request body:', req.body);
+    
+    // ✅ FLEXIBLE: Accept either naming convention from frontend
+    const {
+      title,
+      description,
+      event_date,
+      event_time,
+      location,
+      event_type,
+      show_donors,
+      allow_anonymous
+    } = req.body;
+    
+    // ✅ Handle both possible field names from frontend
+    const fundraising_goal = req.body.fundraising_goal || req.body.fundraising_goal_cents;
+    const min_donation = req.body.min_donation || req.body.min_donation_cents;
 
-        // Validate required fields
-        if (!title || !event_date || !event_type) {
-            return res.status(400).json({
-                success: false,
-                message: "Title, date, and event type are required"
-            });
-        }
+    console.log('📥 Parsed values (in dollars):', { fundraising_goal, min_donation });
 
-        // Get mosque_id for this admin
-        const [adminMosque] = await db.query(
-            "SELECT mosque_id FROM ROLE_ASSIGNMENT WHERE user_id = ? AND role_id = (SELECT id FROM ROLE WHERE name = 'mosque_admin') AND is_active = TRUE",
-            [userId]
-        );
-
-        if (!adminMosque || adminMosque.length === 0) {
-            return res.status(403).json({
-                success: false,
-                message: "You are not assigned to any mosque"
-            });
-        }
-
-        const mosqueId = adminMosque[0].mosque_id;
-
-        // Determine approval status
-        // Fundraising events need ministry approval, others are auto-approved
-        const approvalStatus = event_type === 'fundraising' ? 'pending' : 'approved';
-        const status = event_type === 'fundraising' ? 'scheduled' : 'scheduled';
-
-        // Insert event
-        const [result] = await db.query(`
-            INSERT INTO EVENT 
-            (mosque_id, title, description, event_date, event_time, location, 
-             event_type, status, approval_status, campaign_id, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-            mosqueId,
-            title,
-            description,
-            event_date,
-            event_time || null,
-            location || null,
-            event_type,
-            status,
-            approvalStatus,
-            campaign_id || null,
-            userId
-        ]);
-
-        res.status(201).json({
-            success: true,
-            message: event_type === 'fundraising' 
-                ? "Event created successfully. Waiting for ministry approval."
-                : "Event created and published successfully",
-            eventId: result.insertId,
-            approval_status: approvalStatus
-        });
-
-    } catch (error) {
-        console.error('Error creating event:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error creating event',
-            error: error.message
-        });
+    // Validate required fields
+    if (!title || !description || !event_date || !event_type) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
     }
+
+    // ✅ VALIDATE FUNDRAISING - Check DOLLARS (not cents)
+    if (event_type === 'fundraising') {
+      if (!fundraising_goal || fundraising_goal < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fundraising goal must be at least $1.00'
+        });
+      }
+      
+      if (min_donation && min_donation < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum donation must be at least $1.00'
+        });
+      }
+
+      console.log('✅ Validation passed (dollars):', { fundraising_goal, min_donation });
+    }
+
+    // Get mosque_id
+    const [mosques] = await db.execute(
+      'SELECT id FROM mosque WHERE mosque_admin_id = ?',
+      [user_id]
+    );
+
+    if (mosques.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'You must be a mosque admin to create events'
+      });
+    }
+
+    const mosque_id = mosques[0].id;
+
+    let query;
+    let params;
+
+    if (event_type === 'fundraising') {
+      // ✅ NOW CONVERT TO CENTS (Backend conversion)
+      const fundraising_goal_cents = Math.round(fundraising_goal * 100);
+      const min_donation_cents = Math.round((min_donation || 10) * 100);
+
+      console.log('💰 Converted to cents:', { 
+        fundraising_goal_cents, 
+        min_donation_cents 
+      });
+
+      query = `
+        INSERT INTO event (
+          mosque_id, created_by, title, description, event_date, event_time,
+          location, event_type,
+          fundraising_goal_cents, min_donation_cents, current_donations_cents,
+          show_donors, allow_anonymous,
+          status, approval_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'scheduled', 'pending')
+      `;
+
+      params = [
+        mosque_id,
+        user_id,
+        title,
+        description,
+        event_date,
+        event_time || null,
+        location || null,
+        event_type,
+        fundraising_goal_cents,      // ✅ Saved as cents
+        min_donation_cents,           // ✅ Saved as cents
+        show_donors !== false ? 1 : 0,
+        allow_anonymous !== false ? 1 : 0
+      ];
+    } else {
+      query = `
+        INSERT INTO event (
+          mosque_id, created_by, title, description, event_date, event_time,
+          location, event_type, status, approval_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 'approved')
+      `;
+
+      params = [
+        mosque_id,
+        user_id,
+        title,
+        description,
+        event_date,
+        event_time || null,
+        location || null,
+        event_type
+      ];
+    }
+
+    console.log('🔍 Executing query...');
+    const [result] = await db.execute(query, params);
+
+    console.log('✅ Event created with ID:', result.insertId);
+
+    const [events] = await db.execute(
+      'SELECT * FROM event WHERE id = ?',
+      [result.insertId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Event created successfully',
+      event: events[0],
+      approval_status: events[0].approval_status
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating event:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create event',
+      error: error.message
+    });
+  }
 };
 
 /**
@@ -1007,4 +1077,122 @@ export const getUserCalendarEvents = async (req, res) => {
             error: error.message
         });
     }
+};
+
+// Add this function to your eventController.js
+
+export const getMyMosqueEvents = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    
+    // Get the mosque_id where this user is the admin
+    const [mosques] = await db.execute(
+      'SELECT id FROM mosque WHERE mosque_admin_id = ?',
+      [user_id]
+    );
+
+    if (mosques.length === 0) {
+      return res.json({
+        success: true,
+        events: [],
+        message: 'No mosque found for this admin'
+      });
+    }
+
+    const mosque_id = mosques[0].id;
+
+    // Get all events for this mosque with aggregated data
+    const [events] = await db.execute(`
+      SELECT 
+        e.*,
+        m.name as mosque_name,
+        COUNT(DISTINCT el.user_id) as likes_count,
+        COUNT(DISTINCT CASE WHEN er.status = 'going' THEN er.user_id END) as going_count,
+        COUNT(DISTINCT CASE WHEN er.status = 'maybe' THEN er.user_id END) as maybe_count,
+        COUNT(DISTINCT CASE WHEN er.status = 'not_going' THEN er.user_id END) as not_going_count,
+        COUNT(DISTINCT er.user_id) as rsvp_count,
+        COUNT(DISTINCT ec.id) as comments_count,
+        COALESCE(e.current_donations_cents, 0) as current_donations_cents,
+        COALESCE(e.fundraising_goal_cents, 0) as fundraising_goal_cents
+      FROM event e
+      LEFT JOIN mosque m ON e.mosque_id = m.id
+      LEFT JOIN event_like el ON e.id = el.event_id
+      LEFT JOIN event_rsvp er ON e.id = er.event_id
+      LEFT JOIN event_comment ec ON e.id = ec.event_id
+      WHERE e.mosque_id = ?
+      GROUP BY e.id
+      ORDER BY e.event_date DESC
+    `, [mosque_id]);
+
+    res.json({
+      success: true,
+      events: events
+    });
+
+  } catch (error) {
+    console.error('Error fetching mosque events:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch events'
+    });
+  }
+};
+
+// Mark event as completed (Admin only)
+export const markEventCompleted = async (req, res) => {
+  try {
+    const { id } = req.params;  // ✅ Changed from event_id to id
+    const user_id = req.user.id;
+
+    console.log('📝 Mark event as completed:', { id, user_id });
+
+    // Get event and verify admin
+    const [events] = await db.execute(
+      `SELECT e.*, m.mosque_admin_id 
+       FROM event e 
+       JOIN mosque m ON e.mosque_id = m.id 
+       WHERE e.id = ?`,
+      [id]  // ✅ Use id here
+    );
+
+    if (events.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found' 
+      });
+    }
+
+    const event = events[0];
+
+    // Verify user is the mosque admin
+    if (Number(event.mosque_admin_id) !== Number(user_id)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only mosque admin can mark events as completed' 
+      });
+    }
+
+    // Update event status to completed
+    await db.execute(
+      `UPDATE event 
+       SET status = 'completed' 
+       WHERE id = ?`,
+      [id]  // ✅ Use id here
+    );
+
+    console.log('✅ Event marked as completed');
+
+    res.json({
+      success: true,
+      message: 'Event marked as completed successfully'
+    });
+
+  } catch (error) {
+    console.error('Error marking event as completed:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to mark event as completed',
+      error: error.message 
+    });
+  }
 };

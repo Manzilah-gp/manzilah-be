@@ -6,6 +6,7 @@ import authRoutes from "./routes/authRoutes.js";
 import mosqueRoutes from "./routes/mosqueRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js"; 
 import eventRoutes from "./routes/eventRoutes.js"; 
+import donationRoutes from "./routes/donationRoutes.js";
 
 dotenv.config();
 
@@ -23,6 +24,8 @@ app.use("/api/users", authRoutes); // base path for auth
 app.use("/api/mosques", mosqueRoutes);
 app.use("/api/profile", profileRoutes); // ADD THIS LINE
 app.use("/api/events", eventRoutes);
+app.use("/api/donations", donationRoutes);
+
 
 
 // Default route
