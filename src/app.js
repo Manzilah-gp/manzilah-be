@@ -7,6 +7,12 @@ import mosqueRoutes from "./routes/mosqueRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js"; 
 import eventRoutes from "./routes/eventRoutes.js"; 
 import donationRoutes from "./routes/donationRoutes.js";
+import chatRoutes from './routes/chatRoutes.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -25,7 +31,9 @@ app.use("/api/mosques", mosqueRoutes);
 app.use("/api/profile", profileRoutes); // ADD THIS LINE
 app.use("/api/events", eventRoutes);
 app.use("/api/donations", donationRoutes);
+app.use('/api/chat', chatRoutes);
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
 // Default route
