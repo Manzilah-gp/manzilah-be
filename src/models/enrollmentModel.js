@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/models/enrollmentModel.js
-// Handles enrollment operations
+// MODIFIED: Added updatePaymentStatus method for Stripe webhook
 // ============================================
 import db from "../config/db.js";
 
@@ -25,38 +25,40 @@ export const EnrollmentModel = {
      * Enroll student in course
      * Uses stored procedure sp_enroll_student
      */
-    async enrollStudent(studentId, courseId, paymentId = null) {
-        const connection = await db.getConnection();
+   async enrollStudent(studentId, courseId, paymentId = null) {
+    try {
+        // Call stored procedure
+        await db.execute(`
+            CALL sp_enroll_student(?, ?, ?, @enrollment_id, @error_message)
+        `, [studentId, courseId, paymentId]);
 
-        try {
-            // Call stored procedure
-            const [result] = await connection.execute(`
-                CALL sp_enroll_student(?, ?, ?, @enrollment_id, @error_message)
-            `, [studentId, courseId, paymentId]);
+        // Get output parameters
+        const [output] = await db.execute(`
+            SELECT @enrollment_id as enrollment_id, @error_message as error_message
+        `);
 
-            // Get output parameters
-            const [output] = await connection.execute(`
-                SELECT @enrollment_id as enrollment_id, @error_message as error_message
-            `);
+        const { enrollment_id, error_message } = output[0];
 
-            const { enrollment_id, error_message } = output[0];
-
-            if (error_message) {
-                return {
-                    success: false,
-                    error: error_message
-                };
-            }
-
+        if (error_message) {
             return {
-                success: true,
-                enrollmentId: enrollment_id
+                success: false,
+                error: error_message
             };
-
-        } finally {
-            connection.release();
         }
-    },
+
+        return {
+            success: true,
+            enrollmentId: enrollment_id
+        };
+
+    } catch (error) {
+        console.error('Error enrolling student:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+},
 
     /**
      * Get enrollment details
@@ -87,7 +89,7 @@ export const EnrollmentModel = {
             SELECT 
                 e.id,
                 e.status,
-                e.enrolled_at,
+                e.enrollment_date,
                 c.id as course_id,
                 c.name as course_name,
                 c.course_start_date,
@@ -101,7 +103,7 @@ export const EnrollmentModel = {
             JOIN MOSQUE m ON c.mosque_id = m.id
             LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
             WHERE e.student_id = ?
-            ORDER BY e.enrolled_at DESC
+            ORDER BY e.enrollment_date DESC
         `, [studentId]);
 
         return enrollments;
@@ -135,5 +137,25 @@ export const EnrollmentModel = {
         ]);
 
         return result.insertId;
+    },
+
+   
+    /**
+     * Update payment status after Stripe confirms payment
+     * PURPOSE: Mark payment as completed when webhook is received
+     * REASON: Ensures payment record reflects actual Stripe status
+     * 
+     * @param {number} paymentId - ID of payment record
+     * @param {string} status - New status (pending/completed/failed)
+     * @param {string} gatewayChargeId - Stripe payment intent ID
+     */
+    async updatePaymentStatus(paymentId, status, gatewayChargeId) {
+        await db.execute(`
+            UPDATE PAYMENT 
+            SET status = ?, 
+                gateway_charge_id = ?,
+                updated_at = NOW()
+            WHERE id = ?
+        `, [status, gatewayChargeId, paymentId]);
     }
 };

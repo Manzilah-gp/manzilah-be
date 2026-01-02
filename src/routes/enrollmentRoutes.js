@@ -7,13 +7,25 @@ import {
     enrollInFreeCourse,
     enrollInPaidCourse,
     getMyEnrollments,
-    getEnrollmentDetails
+    getEnrollmentDetails,
+   completeEnrollmentAfterPayment , 
+
+    verifyPaymentSession      
 } from "../controllers/enrollmentController.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// All enrollment routes require authentication
+
+/**
+
+ * GET /api/enrollment/verify-payment/:sessionId
+ */
+router.get("/verify-payment/:sessionId", verifyToken, verifyPaymentSession);
+
+
+
+// All other enrollment routes require authentication
 router.use(verifyToken);
 
 /**
@@ -31,9 +43,8 @@ router.post("/check-eligibility", checkEnrollmentEligibility);
 router.post("/enroll-free", enrollInFreeCourse);
 
 /**
- * Enroll in a PAID course (with payment)
- * POST /api/enrollment/enroll-paid
- * Body: { courseId: number, paymentGateway?: string, paymentReference?: string }
+ * Enroll in a PAID course (creates Stripe checkout session)
+ *  MODIFIED: Now returns Stripe session URL instead of direct enrollment
  */
 router.post("/enroll-paid", enrollInPaidCourse);
 
@@ -43,10 +54,11 @@ router.post("/enroll-paid", enrollInPaidCourse);
  */
 router.get("/my-enrollments", getMyEnrollments);
 
-/**
- * Get specific enrollment details
- * GET /api/enrollment/:id
- */
-router.get("/:id", getEnrollmentDetails);
 
+router.get("/:id", getEnrollmentDetails);
+/**
+ * Complete enrollment after payment
+ * POST /api/enrollment/complete-payment
+ */
+router.post("/complete-payment", completeEnrollmentAfterPayment); 
 export default router;
