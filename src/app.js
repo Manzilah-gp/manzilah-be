@@ -13,6 +13,7 @@ import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 import calendarRoutes from "./routes/calendarRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import videoCallRoutes from "./routes/videoCallRoutes.js";
+import progressRoutes from "./routes/progressRoutes.js";
 
 
 dotenv.config();
@@ -42,6 +43,7 @@ app.use("/api/enrollment", enrollmentRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
 app.use("/api/video-calls", videoCallRoutes);
+app.use("/api/progress", progressRoutes);
 
 // Default route
 app.get('/', (req, res) => {

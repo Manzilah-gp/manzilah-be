@@ -358,7 +358,6 @@ export const StatisticsModel = {
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             LEFT JOIN ENROLLMENT e ON c.id = e.course_id 
                 AND e.status = 'active'
-                AND e.enrollment_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
             WHERE c.mosque_id = ? 
             AND c.is_active = TRUE
             GROUP BY c.id
