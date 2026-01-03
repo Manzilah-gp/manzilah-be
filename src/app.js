@@ -3,8 +3,15 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import authRoutes from "./routes/authRoutes.js";
-// import userRoutes from "./routes/userRoutes.js";
 import mosqueRoutes from "./routes/mosqueRoutes.js";
+import profileRoutes from "./routes/profileRoutes.js";
+import eventRoutes from "./routes/eventRoutes.js";
+import donationRoutes from "./routes/donationRoutes.js";
+import chatRoutes from './routes/chatRoutes.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+
 import statisticsRoutes from "./routes/statisticsRoutes.js"
 import courseRoutes from "./routes/courseRoutes.js";
 import teacherManagementRoutes from "./routes/teacherManagementRoutes.js";
@@ -15,6 +22,8 @@ import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import videoCallRoutes from "./routes/videoCallRoutes.js";
 import progressRoutes from "./routes/progressRoutes.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -35,6 +44,13 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/api/users", authRoutes); // base path for auth
 app.use("/api/mosques", mosqueRoutes);
+app.use("/api/profile", profileRoutes); // ADD THIS LINE
+app.use("/api/events", eventRoutes);
+app.use("/api/donations", donationRoutes);
+app.use('/api/chat', chatRoutes);
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use("/api/dashboard", statisticsRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/teachers", teacherManagementRoutes);
