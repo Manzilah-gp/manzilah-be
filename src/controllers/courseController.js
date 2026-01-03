@@ -59,11 +59,17 @@ export const createCourse = async (req, res) => {
         // Check if user has permission for this mosque
         // (You may need to add this validation based on user roles)
 
+        // Helper to sanitize dates
+        const sanitizeDate = (date) => (date === "" ? null : date);
+
         // Include target_gender in course data (can be null for mixed gender)
         const fullCourseData = {
             ...courseData,
             mosque_id: mosqueId, // Use admin's mosque, not from request
-            target_gender: courseData.target_gender || null
+            target_gender: courseData.target_gender || null,
+            enrollment_deadline: sanitizeDate(courseData.enrollment_deadline),
+            course_start_date: sanitizeDate(courseData.course_start_date),
+            course_end_date: sanitizeDate(courseData.course_end_date)
         };
 
         const courseId = await CourseModel.create(fullCourseData, user.id);
@@ -141,10 +147,17 @@ export const updateCourse = async (req, res) => {
             return res.status(404).json({ message: "Course not found" });
         }
 
+        // Helper to sanitize dates
+        const sanitizeDate = (date) => (date === "" ? null : date);
+
         // Include target_gender in update data if provided
         if (updateData.target_gender !== undefined) {
             updateData.target_gender = updateData.target_gender || null;
         }
+
+        if (updateData.enrollment_deadline !== undefined) updateData.enrollment_deadline = sanitizeDate(updateData.enrollment_deadline);
+        if (updateData.course_start_date !== undefined) updateData.course_start_date = sanitizeDate(updateData.course_start_date);
+        if (updateData.course_end_date !== undefined) updateData.course_end_date = sanitizeDate(updateData.course_end_date);
 
         const updated = await CourseModel.update(id, updateData);
 

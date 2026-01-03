@@ -1,6 +1,7 @@
 import express from "express";
 import { register, login, registerTeacher } from "../controllers/authController.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
+import db from "../config/db.js";
 
 const router = express.Router();
 
@@ -8,6 +9,8 @@ const router = express.Router();
 router.post("/register", register);
 router.post("/register-teacher", registerTeacher);
 router.post("/login", login);
+
+import UserModel from "../models/UserModel.js";
 
 // ✅ Protected route (requires token)
 router.get("/profile", verifyToken, async (req, res) => {
@@ -21,8 +24,19 @@ router.get("/profile", verifyToken, async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        res.json({ user: user[0] });
+        // Fetch roles
+        const roleRows = await UserModel.getUserRoles(req.user.id);
+        const roles = roleRows.map(r => r.name);
+
+        // Add roles to the user object
+        const userData = {
+            ...user[0],
+            roles: roles
+        };
+
+        res.json({ user: userData });
     } catch (err) {
+        console.error("Error fetching profile:", err);
         res.status(500).json({ message: "Error fetching profile" });
     }
 });

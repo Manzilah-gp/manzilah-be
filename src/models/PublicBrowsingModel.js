@@ -285,6 +285,8 @@ export const PublicBrowsingModel = {
                 ml.level_name as memorization_level,
                 ml.juz_range_start,
                 ml.juz_range_end,
+                ml.page_range_start,
+                ml.page_range_end,
                 m.name as mosque_name,
                 m.id as mosque_id,
                 m.contact_number as mosque_contact,

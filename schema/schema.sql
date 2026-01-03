@@ -640,6 +640,12 @@ DELIMITER ;
 -- Handles the complete enrollment process
 -- ============================================
 
+-- ============================================
+-- UPDATED: Create Stored Procedure for Enrollment
+-- Now handles different course types properly
+-- ============================================
+
+DROP PROCEDURE IF EXISTS sp_enroll_student;
 
 DELIMITER //
 
@@ -655,9 +661,14 @@ proc_label: BEGIN
     DECLARE v_mosque_id INT;
     DECLARE v_student_role_id INT;
     DECLARE v_already_assigned BOOLEAN;
-    DECLARE v_is_online_enabled BOOLEAN;
-    DECLARE v_online_url VARCHAR(500);
     DECLARE v_eligibility JSON;
+    
+    -- NEW: Variables for progress initialization
+    DECLARE v_course_type_id INT;
+    DECLARE v_course_type_name VARCHAR(50);
+    DECLARE v_course_level INT;
+    DECLARE v_level_start_page INT;
+    DECLARE v_level_end_page INT;
 
     -- Initialize outputs
     SET p_enrollment_id = NULL;
@@ -675,14 +686,24 @@ proc_label: BEGIN
         LEAVE proc_label;
     END IF;
 
-    -- 2. Get course info
-    SELECT price_cents, mosque_id 
-    INTO v_course_price, v_mosque_id
-    FROM COURSE
-    WHERE id = p_course_id;
+    -- 2. Get course info (UPDATED: fetch course type and level)
+    SELECT 
+        c.price_cents, 
+        c.mosque_id,
+        c.course_type_id,
+        c.course_level,
+        ct.name
+    INTO 
+        v_course_price, 
+        v_mosque_id,
+        v_course_type_id,
+        v_course_level,
+        v_course_type_name
+    FROM COURSE c
+    JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
+    WHERE c.id = p_course_id;
 
-
-    -- 4. Payment validation for paid courses
+    -- 3. Payment validation for paid courses
     IF v_course_price > 0 THEN
         IF p_payment_id IS NULL THEN
             SET p_error_message = 'Payment required for this course';
@@ -700,17 +721,48 @@ proc_label: BEGIN
         END IF;
     END IF;
 
-    -- 5. Create enrollment
+    -- 4. Create enrollment
     INSERT INTO ENROLLMENT (student_id, course_id, payment_id, status, enrollment_date)
     VALUES (p_student_id, p_course_id, p_payment_id, 'active', NOW());
 
     SET p_enrollment_id = LAST_INSERT_ID();
 
-    -- 6. Create initial progress record
-    INSERT INTO STUDENT_PROGRESS (enrollment_id, completion_percentage)
-    VALUES (p_enrollment_id, 0);
+    -- 5. Create initial progress record (UPDATED: course-type aware)
+    
+    -- If memorization course, get level page ranges
+    IF v_course_type_name = 'memorization' AND v_course_level IS NOT NULL THEN
+        -- Get level page ranges
+        SELECT page_range_start, page_range_end
+        INTO v_level_start_page, v_level_end_page
+        FROM MEMORIZATION_LEVEL
+        WHERE id = v_course_level;
+        
+        -- Initialize with level bounds and page tracking
+        INSERT INTO STUDENT_PROGRESS (
+            enrollment_id, 
+            completion_percentage,
+            current_page,
+            level_start_page,
+            level_end_page
+        ) VALUES (
+            p_enrollment_id, 
+            0,
+            v_level_start_page,  -- Start at first page of level
+            v_level_start_page,
+            v_level_end_page
+        );
+    ELSE
+        -- For non-memorization courses (Tajweed/Fiqh), simple initialization
+        INSERT INTO STUDENT_PROGRESS (
+            enrollment_id, 
+            completion_percentage
+        ) VALUES (
+            p_enrollment_id, 
+            0
+        );
+    END IF;
 
-    -- 7. Assign student role to mosque (if not assigned)
+    -- 6. Assign student role to mosque (if not assigned)
     SELECT id INTO v_student_role_id FROM ROLE WHERE name = 'student';
 
     SELECT EXISTS(
@@ -774,3 +826,100 @@ ADD COLUMN approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'appr
 ALTER TABLE EVENT 
 ADD COLUMN rejection_reason TEXT NULL 
 AFTER approval_status;
+
+
+-- ============================================
+-- Student Progress Updates 
+-- student progress for memorization courses and attendance logs for tajweed/fiqh courses
+-- ============================================
+
+-- Update MEMORIZATION_LEVEL table to include actual page ranges
+ALTER TABLE MEMORIZATION_LEVEL
+ADD COLUMN page_range_start INT NOT NULL COMMENT 'Actual book page number start',
+ADD COLUMN page_range_end INT NOT NULL COMMENT 'Actual book page number end';
+
+-- Update existing levels with real page numbers
+UPDATE MEMORIZATION_LEVEL 
+SET page_range_start = 1, page_range_end = 101 
+WHERE level_number = 1 AND course_type_id = 1;
+
+UPDATE MEMORIZATION_LEVEL 
+SET page_range_start = 102, page_range_end = 201 
+WHERE level_number = 2 AND course_type_id = 1;
+
+UPDATE MEMORIZATION_LEVEL 
+SET page_range_start = 202, page_range_end = 301 
+WHERE level_number = 3 AND course_type_id = 1;
+
+UPDATE MEMORIZATION_LEVEL 
+SET page_range_start = 302, page_range_end = 401 
+WHERE level_number = 4 AND course_type_id = 1;
+
+UPDATE MEMORIZATION_LEVEL 
+SET page_range_start = 402, page_range_end = 501 
+WHERE level_number = 5 AND course_type_id = 1;
+
+UPDATE MEMORIZATION_LEVEL 
+SET page_range_start = 502, page_range_end = 604 
+WHERE level_number = 6 AND course_type_id = 1;
+
+
+-- Add to STUDENT_PROGRESS table
+-- current_page now stores actual book page (1-604 for full Quran)
+
+ALTER TABLE STUDENT_PROGRESS 
+ADD COLUMN current_page INT DEFAULT 0 COMMENT 'Actual book page number (1-604 for complete Quran)';
+ADD COLUMN exam_1_score DECIMAL(5,2) NULL COMMENT 'First 20 Pages exam',
+ADD COLUMN exam_1_date DATE NULL,
+ADD COLUMN exam_1_notes TEXT NULL,
+ADD COLUMN exam_2_score DECIMAL(5,2) NULL COMMENT 'Second 20 Pages exam',
+ADD COLUMN exam_2_date DATE NULL,
+ADD COLUMN exam_2_notes TEXT NULL,
+ADD COLUMN exam_3_score DECIMAL(5,2) NULL COMMENT 'Third 20 Pages exam',
+ADD COLUMN exam_3_date DATE NULL,
+ADD COLUMN exam_3_notes TEXT NULL,
+ADD COLUMN exam_4_score DECIMAL(5,2) NULL COMMENT 'Fourth 20 Pages exam',
+ADD COLUMN exam_4_date DATE NULL,
+ADD COLUMN exam_4_notes TEXT NULL,
+ADD COLUMN exam_5_score DECIMAL(5,2) NULL COMMENT 'Fifth 20 Pages exam',
+ADD COLUMN exam_5_date DATE NULL,
+ADD COLUMN exam_5_notes TEXT NULL,
+ADD COLUMN final_exam_score DECIMAL(5,2) NULL COMMENT 'Final graduation exam',
+ADD COLUMN final_exam_date DATE NULL,
+ADD COLUMN final_exam_notes TEXT NULL,
+ADD COLUMN is_graduated BOOLEAN DEFAULT FALSE,
+ADD COLUMN graduation_date DATE NULL;
+ADD COLUMN level_start_page INT COMMENT 'Start page of current level',
+ADD COLUMN level_end_page INT COMMENT 'End page of current level';
+
+-- For attendance-based progress (Tajweed/Fiqh)
+CREATE TABLE COURSE_ATTENDANCE (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    enrollment_id INT NOT NULL,
+    attendance_date DATE NOT NULL,
+    status ENUM('present', 'absent', 'excused') NOT NULL,
+    notes TEXT,
+    recorded_by INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (enrollment_id) REFERENCES ENROLLMENT(id) ON DELETE CASCADE,
+    FOREIGN KEY (recorded_by) REFERENCES USER(id),
+    UNIQUE KEY unique_attendance_record (enrollment_id, attendance_date)
+);
+
+-- Progress history for exam milestones
+CREATE TABLE PROGRESS_MILESTONE_HISTORY (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    enrollment_id INT NOT NULL,
+    milestone_type ENUM('exam_1', 'exam_2', 'exam_3', 'exam_4', 'exam_5', 'final_exam', 'graduation') NOT NULL,
+    score DECIMAL(5,2) NULL,
+    passed BOOLEAN NOT NULL,
+    notes TEXT,
+    achieved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    recorded_by INT NOT NULL,
+    -- 🔔 FIREBASE NOTIFICATION: Send notification when milestone is achieved
+    notification_sent BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (enrollment_id) REFERENCES ENROLLMENT(id) ON DELETE CASCADE,
+    FOREIGN KEY (recorded_by) REFERENCES USER(id),
+    INDEX idx_milestone_enrollment (enrollment_id),
+    INDEX idx_milestone_type (milestone_type)
+);

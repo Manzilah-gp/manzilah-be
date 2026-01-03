@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 
 import authRoutes from "./routes/authRoutes.js";
 import mosqueRoutes from "./routes/mosqueRoutes.js";
-import profileRoutes from "./routes/profileRoutes.js"; 
-import eventRoutes from "./routes/eventRoutes.js"; 
+import profileRoutes from "./routes/profileRoutes.js";
+import eventRoutes from "./routes/eventRoutes.js";
 import donationRoutes from "./routes/donationRoutes.js";
 import chatRoutes from './routes/chatRoutes.js';
 import path from 'path';
@@ -19,6 +19,8 @@ import publicBrowsingRoutes from "./routes/publicBrowsingRoutes.js";
 import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 import calendarRoutes from "./routes/calendarRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
+import videoCallRoutes from "./routes/videoCallRoutes.js";
+import progressRoutes from "./routes/progressRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,10 +58,8 @@ app.use("/api/public", publicBrowsingRoutes);
 app.use("/api/enrollment", enrollmentRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
-// //API routes
-// app.use(express.json());
-// app.use("/api/users", userRoutes);
-// app.use("/api/mosques", mosqueRoutes);
+app.use("/api/video-calls", videoCallRoutes);
+app.use("/api/progress", progressRoutes);
 
 // Default route
 app.get('/', (req, res) => {
