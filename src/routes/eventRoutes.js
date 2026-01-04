@@ -18,7 +18,9 @@ import {
     getEventInteractions,
     getUserCalendarEvents,
     getMyMosqueEvents,
-      markEventCompleted  
+    markEventCompleted,
+      getEventsFromEnrolledMosques,
+    getEnrolledMosquesEventCount 
 
 } from "../controllers/eventController.js";
 
@@ -74,7 +76,9 @@ router.put("/:id/reject", verifyToken, checkRole(["ministry_admin"]), rejectEven
 //mange fundraising evemts
 router.get('/my-mosque-events', verifyToken, getMyMosqueEvents);
 
-
+// Routes to get the  event from the enrolled mousqes 
+router.get('/my-enrolled-mosques',verifyToken ,getEventsFromEnrolledMosques);
+router.get('/my-enrolled-mosques/count',verifyToken, getEnrolledMosquesEventCount);
 router.get("/:id", verifyToken, getEventById);
 
 export default router;

@@ -1196,3 +1196,113 @@ export const markEventCompleted = async (req, res) => {
     });
   }
 };
+
+// ============================================
+// FILE: BENew/src/controllers/eventController.js
+// FEATURE 1: FIXED - Get events from enrolled mosques
+// Add these at the end of your existing eventController.js file
+// ============================================
+
+/**
+ * Get events from mosques where user is enrolled in courses
+ * @route GET /api/events/my-enrolled-mosques
+ * @access Private (Students/Parents)
+ * 
+ * PURPOSE: Students/Parents can see events only from mosques where they have enrollments
+ * LOGIC: 
+ * 1. Find all courses the student is enrolled in
+ * 2. Get mosque_ids from those courses
+ * 3. Get events from those mosques
+ * 4. Return events with mosque and location details
+ * 
+ * FIXED: 
+ * - Removed donation_campaign table references
+ * - Gets region/governorate from mosque_location table instead of mosque
+ */
+export const getEventsFromEnrolledMosques = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // SQL query to get events from mosques where user has course enrollments
+        const [events] = await db.execute(`
+            SELECT DISTINCT
+                e.*,
+                m.name as mosque_name,
+                m.contact_number as mosque_contact,
+                ml.region,
+                ml.governorate,
+                ml.address as mosque_address,
+                u.full_name as created_by_name
+            FROM event e
+            JOIN mosque m ON e.mosque_id = m.id
+            LEFT JOIN mosque_location ml ON m.id = ml.mosque_id
+            LEFT JOIN user u ON e.created_by = u.id
+            WHERE e.mosque_id IN (
+                -- Get mosques where user has active enrollments
+                SELECT DISTINCT c.mosque_id
+                FROM enrollment en
+                JOIN course c ON en.course_id = c.id
+                WHERE en.student_id = ?
+                AND en.status = 'active'
+            )
+            AND e.approval_status = 'approved'
+            AND e.status != 'cancelled'
+            ORDER BY e.event_date DESC, e.event_time DESC
+        `, [userId]);
+
+        res.status(200).json({
+            success: true,
+            count: events.length,
+            data: events
+        });
+
+    } catch (error) {
+        console.error('❌ Error fetching enrolled mosque events:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch events from enrolled mosques',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Get count of events from enrolled mosques
+ * @route GET /api/events/my-enrolled-mosques/count
+ * @access Private (Students/Parents)
+ * 
+ * PURPOSE: Show badge count on filter button
+ * LOGIC: Same as above but just returns count
+ */
+export const getEnrolledMosquesEventCount = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        const [result] = await db.execute(`
+            SELECT COUNT(DISTINCT e.id) as event_count
+            FROM event e
+            WHERE e.mosque_id IN (
+                SELECT DISTINCT c.mosque_id
+                FROM enrollment en
+                JOIN course c ON en.course_id = c.id
+                WHERE en.student_id = ?
+                AND en.status = 'active'
+            )
+            AND e.approval_status = 'approved'
+            AND e.status != 'cancelled'
+        `, [userId]);
+
+        res.status(200).json({
+            success: true,
+            count: result[0].event_count
+        });
+
+    } catch (error) {
+        console.error('❌ Error fetching event count:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch event count',
+            error: error.message
+        });
+    }
+};
