@@ -20,6 +20,9 @@ import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 import calendarRoutes from "./routes/calendarRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import teacherProfileRoutes from "./routes/teacherProfileRoutes.js";
+import parentRoutes from './routes/parentRoutes.js';
+
+
 // import videoCallRoutes from "./routes/videoCallRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,6 +62,7 @@ app.use("/api/enrollment", enrollmentRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
 app.use("/api/teacher-profile", teacherProfileRoutes);
+app.use('/api/parent', parentRoutes);
 // app.use("/api/video-calls", videoCallRoutes);
 
 // //API routes
