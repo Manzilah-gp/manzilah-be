@@ -21,6 +21,9 @@ import calendarRoutes from "./routes/calendarRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import videoCallRoutes from "./routes/videoCallRoutes.js";
 import progressRoutes from "./routes/progressRoutes.js";
+import teacherCoursesRoutes from "./routes/teacherCoursesRoutes.js";
+import materialRoutes from "./routes/materialRoutes.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +63,9 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
 app.use("/api/video-calls", videoCallRoutes);
 app.use("/api/progress", progressRoutes);
+app.use("/api/teacher", teacherCoursesRoutes);
+app.use("/api/materials", materialRoutes);
+
 
 // Default route
 app.get('/', (req, res) => {

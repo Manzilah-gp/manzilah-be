@@ -33,7 +33,7 @@ export const ProgressModel = {
     /**
      * Calculate completion percentage based on level
      */
-    calculateCompletionPercentage(currentPage, levelInfo) {
+    calculateMemorizationCompletionPercentage(currentPage, levelInfo) {
         if (!levelInfo) return 0;
 
         const { startPage, endPage } = levelInfo;
@@ -124,7 +124,7 @@ export const ProgressModel = {
         }
 
         // Calculate completion percentage
-        const completionPercentage = this.calculateCompletionPercentage(currentPage, levelInfo);
+        const completionPercentage = this.calculateMemorizationCompletionPercentage(currentPage, levelInfo);
 
         // Update progress
         await db.execute(`
@@ -385,12 +385,7 @@ export const ProgressModel = {
     async getProgressDetails(enrollmentId) {
         const [progress] = await db.execute(`
             SELECT 
-                sp.id,
-                sp.enrollment_id,
-                sp.completion_percentage,
-                sp.is_graduated,
-                sp.graduation_date,
-                sp.updated_at,
+                sp.*,
                 e.student_id,
                 e.course_id,
                 c.name as course_name,

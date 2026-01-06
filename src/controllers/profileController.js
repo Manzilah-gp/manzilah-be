@@ -12,7 +12,7 @@ export const getUserProfile = async (req, res) => {
         const [userRows] = await db.query(`
             SELECT 
                 id, full_name, email, phone, gender, dob, 
-                created_at, updated_at, approved
+                created_at, updated_at
             FROM USER 
             WHERE id = ?
         `, [userId]);
@@ -83,10 +83,10 @@ export const getUserProfile = async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching profile:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Error fetching profile',
-            error: error.message 
+            error: error.message
         });
     }
 };
@@ -201,7 +201,7 @@ async function getStudentData(userId) {
                 c.name as course_name,
                 ct.name as course_type,
                 u.full_name as teacher_name,
-                e.current_level,
+                c.course_level,
                 e.enrollment_date,
                 e.status,
                 COALESCE(

@@ -923,3 +923,51 @@ CREATE TABLE PROGRESS_MILESTONE_HISTORY (
     INDEX idx_milestone_enrollment (enrollment_id),
     INDEX idx_milestone_type (milestone_type)
 );
+
+
+-- Create Course Materials Table
+CREATE TABLE COURSE_MATERIAL (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    course_id INT NOT NULL,
+    section_id INT NULL, -- For organizing materials into sections
+    uploaded_by INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    material_label VARCHAR(100), -- 'Notes', 'Assignment', 'Resource', custom
+    file_name VARCHAR(255) NOT NULL,
+    file_size INT, -- bytes
+    file_type VARCHAR(50), -- 'pdf', 'image', 'document'
+    firebase_url VARCHAR(500) NOT NULL, -- Firebase Storage URL
+    firebase_path VARCHAR(500), -- Path in Firebase for deletion
+    download_count INT DEFAULT 0,
+    is_visible BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES COURSE(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by) REFERENCES USER(id),
+    FOREIGN KEY (section_id) REFERENCES MATERIAL_SECTION(id) ON DELETE CASCADE,
+    INDEX idx_course_materials (course_id),
+    INDEX idx_section (section_id)
+);
+
+-- Material Sections (like Moodle)
+CREATE TABLE MATERIAL_SECTION (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    course_id INT NOT NULL,
+    section_name VARCHAR(255) NOT NULL,
+    section_order INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES COURSE(id) ON DELETE CASCADE,
+    INDEX idx_course_sections (course_id)
+);
+
+-- Download tracking
+CREATE TABLE MATERIAL_DOWNLOAD_LOG (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    material_id INT NOT NULL,
+    user_id INT NOT NULL,
+    downloaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (material_id) REFERENCES COURSE_MATERIAL(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES USER(id),
+    INDEX idx_material_user (material_id, user_id)
+);
