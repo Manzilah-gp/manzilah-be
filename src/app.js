@@ -24,6 +24,12 @@ import progressRoutes from "./routes/progressRoutes.js";
 import teacherCoursesRoutes from "./routes/teacherCoursesRoutes.js";
 import materialRoutes from "./routes/materialRoutes.js";
 
+import teacherProfileRoutes from "./routes/teacherProfileRoutes.js";
+import parentRoutes from './routes/parentRoutes.js';
+import firebaseNotificationRoutes from './routes/firebaseNotificationRoutes.js';
+
+
+// import videoCallRoutes from "./routes/videoCallRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +67,12 @@ app.use("/api/public", publicBrowsingRoutes);
 app.use("/api/enrollment", enrollmentRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
+app.use("/api/teacher-profile", teacherProfileRoutes);
+app.use('/api/parent', parentRoutes);
+app.use('/api/firebase-notifications', firebaseNotificationRoutes);
+
+// app.use("/api/video-calls", videoCallRoutes);
+
 app.use("/api/video-calls", videoCallRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/teacher", teacherCoursesRoutes);

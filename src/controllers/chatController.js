@@ -4,7 +4,7 @@ import db from '../config/db.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-
+import { notifyUser } from './firebaseNotificationController.js'; 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = 'uploads/chat';
@@ -521,7 +521,59 @@ export const sendMessage = async (req, res) => {
       JOIN user u ON m.sender_id = u.id
       WHERE m.id = ?
     `, [result.insertId]);
+ // ⬇️⬇️⬇️ ADD THIS ENTIRE BLOCK HERE ⬇️⬇️⬇️
+    
+  // Get sender's full name from database (once, before loop)
+const [sender] = await db.execute(
+  'SELECT full_name FROM user WHERE id = ?',
+  [userId]
+);
 
+const senderName = sender[0]?.full_name || 'Someone';
+
+// Get other participants to notify
+const [otherParticipants] = await db.execute(`
+  SELECT user_id 
+  FROM conversation_participant
+  WHERE conversation_id = ? 
+    AND user_id != ? 
+    AND left_at IS NULL
+`, [conversation_id, userId]);
+
+// Get conversation info
+const [convInfo] = await db.execute(`
+  SELECT type, name FROM conversation WHERE id = ?
+`, [conversation_id]);
+
+const conversationType = convInfo[0]?.type;
+const conversationName = convInfo[0]?.name;
+
+// Send notification to each participant
+for (const participant of otherParticipants) {
+  const receiverId = participant.user_id;
+  
+  let notificationTitle = 'New Message';
+  let notificationMessage = `${senderName} sent you a message`;
+  
+  if (conversationType === 'group' && conversationName) {
+    notificationTitle = `New message in ${conversationName}`;
+    notificationMessage = `${senderName}: ${message_text.substring(0, 50)}${message_text.length > 50 ? '...' : ''}`;
+  }
+
+  try {
+    await notifyUser(receiverId, {
+      type: 'message',
+      title: notificationTitle,
+      message: notificationMessage,
+      link: `/chat?conversation=${conversation_id}`,
+      icon: '💬'
+    });
+  } catch (notifError) {
+    console.error('Notification error:', notifError);
+  }
+}
+    
+    // ⬆️⬆️⬆️ END OF NOTIFICATION CODE ⬆️⬆️⬆️
     res.json({
       success: true,
       message: messages[0]

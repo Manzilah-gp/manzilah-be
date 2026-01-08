@@ -194,7 +194,6 @@ export const updateUserLocation = async (req, res) => {
 
 async function getStudentData(userId) {
     try {
-        // Get enrollments with progress
         const [enrollments] = await db.query(`
             SELECT 
                 e.id as enrollment_id,
@@ -212,45 +211,15 @@ async function getStudentData(userId) {
             FROM ENROLLMENT e
             JOIN COURSE c ON e.course_id = c.id
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
-            JOIN USER u ON e.teacher_id = u.id
+            LEFT JOIN USER u ON c.teacher_id = u.id
             WHERE e.student_id = ?
-            ORDER BY e.enrollment_date DESC
-        `, [userId]);
-
-        // Get attendance stats
-        const [attendanceStats] = await db.query(`
-            SELECT 
-                COUNT(*) as total_sessions,
-                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as sessions_attended,
-                ROUND(
-                    (SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 
-                    2
-                ) as attendance_rate
-            FROM ATTENDANCE a
-            JOIN ENROLLMENT e ON a.enrollment_id = e.id
-            WHERE e.student_id = ?
-        `, [userId]);
-
-        // Get evaluations
-        const [evaluations] = await db.query(`
-            SELECT 
-                u.full_name as teacher_name,
-                ev.rating,
-                ev.comments,
-                ev.created_at
-            FROM EVALUATION ev
-            JOIN USER u ON ev.evaluator_id = u.id
-            WHERE ev.evaluatee_id = ?
-            ORDER BY ev.created_at DESC
-            LIMIT 5
         `, [userId]);
 
         return {
             enrollments,
-            attendance_rate: attendanceStats[0]?.attendance_rate || 0,
-            total_sessions: attendanceStats[0]?.total_sessions || 0,
-            sessions_attended: attendanceStats[0]?.sessions_attended || 0,
-            evaluations
+            attendance_rate: 0,  // ← Set to 0 since ATTENDANCE table doesn't exist
+            total_sessions: 0,
+            sessions_attended: 0,
         };
     } catch (error) {
         console.error('Error getting student data:', error);
@@ -267,8 +236,7 @@ async function getTeacherData(userId) {
                 has_sharea_certificate,
                 tajweed_certificate_url,
                 sharea_certificate_url,
-                experience_years,
-                preferred_teaching_format,
+\                preferred_teaching_format,
                 status
             FROM TEACHER_CERTIFICATION
             WHERE user_id = ?
@@ -278,7 +246,6 @@ async function getTeacherData(userId) {
         const [expertise] = await db.query(`
             SELECT 
                 ct.name as course_type,
-                te.years_experience,
                 te.hourly_rate_cents,
                 te.is_memorization_selected,
                 ml.level_name as max_level
