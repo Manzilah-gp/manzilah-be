@@ -234,8 +234,7 @@ async function getTeacherData(userId) {
                 has_sharea_certificate,
                 tajweed_certificate_url,
                 sharea_certificate_url,
-                experience_years,
-                preferred_teaching_format,
+\                preferred_teaching_format,
                 status
             FROM TEACHER_CERTIFICATION
             WHERE user_id = ?
@@ -245,7 +244,6 @@ async function getTeacherData(userId) {
         const [expertise] = await db.query(`
             SELECT 
                 ct.name as course_type,
-                te.years_experience,
                 te.hourly_rate_cents,
                 te.is_memorization_selected,
                 ml.level_name as max_level
