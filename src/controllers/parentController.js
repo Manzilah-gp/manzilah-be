@@ -1,6 +1,7 @@
 //Parent-Child Relationship Management
 
 import db from "../config/db.js";
+import { notifyUser } from './firebaseNotificationController.js'; 
 
 /**
  * Send parent-child relationship request
@@ -122,6 +123,15 @@ if (!req.user.roles.includes('parent')) {
             WHERE id = ?
         `, [parentId]);
 
+if (result.insertId) {
+  await notifyUser(child.id, {
+    type: 'system',
+    title: 'Parent Relationship Request',
+    message: `${parentInfo[0].full_name} wants to connect as your ${relationshipType}`,
+    link: `/profile?tab=relationships`,
+    icon: '👨‍👩‍👧'
+  });
+}
         res.status(201).json({
             success: true,
             message: 'Relationship request sent successfully! Child must accept.',
@@ -287,7 +297,17 @@ export const acceptRequest = async (req, res) => {
                 verified_at = NOW()
             WHERE id = ?
         `, [childId, requestId]);
+const [student] = await db.execute(`
+  SELECT full_name FROM user WHERE id = ?
+`, [childId]);
 
+await notifyUser(request.parent_id, {
+  type: 'system',
+  title: 'Relationship Accepted',
+  message: `${student[0].full_name} accepted your relationship request`,
+  link: `/my-children`,
+  icon: '✅'
+});
         res.status(200).json({
             success: true,
             message: `Relationship with ${request.parent_name} accepted successfully!`,
@@ -341,7 +361,23 @@ export const rejectRequest = async (req, res) => {
                 message: 'This request is not for you'
             });
         }
+// Before: await db.execute(`DELETE FROM parent_child_relationship...`);
 
+const [request] = await db.execute(`
+  SELECT parent_id, p.full_name as parent_name, u.full_name as child_name
+  FROM parent_child_relationship pcr
+  JOIN user p ON pcr.parent_id = p.id
+  JOIN user u ON pcr.child_id = u.id
+  WHERE pcr.id = ?
+`, [requestId]);
+
+await notifyUser(request[0].parent_id, {
+  type: 'system',
+  title: 'Relationship Request Declined',
+  message: `Your relationship request was not accepted`,
+  link: `/parent/my-requests`,
+  icon: '❌'
+});
         // Delete the request
         await db.execute(`
             DELETE FROM parent_child_relationship

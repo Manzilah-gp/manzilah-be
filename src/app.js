@@ -21,6 +21,7 @@ import calendarRoutes from "./routes/calendarRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import teacherProfileRoutes from "./routes/teacherProfileRoutes.js";
 import parentRoutes from './routes/parentRoutes.js';
+import firebaseNotificationRoutes from './routes/firebaseNotificationRoutes.js';
 
 
 // import videoCallRoutes from "./routes/videoCallRoutes.js";
@@ -63,6 +64,8 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/student", studentDashboardRoutes);
 app.use("/api/teacher-profile", teacherProfileRoutes);
 app.use('/api/parent', parentRoutes);
+app.use('/api/firebase-notifications', firebaseNotificationRoutes);
+
 // app.use("/api/video-calls", videoCallRoutes);
 
 // //API routes

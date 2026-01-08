@@ -1,5 +1,6 @@
 // backend/src/controllers/eventController.js
 import db from "../config/db.js";
+import { notifyUser } from './firebaseNotificationController.js'; 
 
 /**
  * Create a new event
@@ -114,7 +115,7 @@ export const createEvent = async (req, res) => {
         INSERT INTO event (
           mosque_id, created_by, title, description, event_date, event_time,
           location, event_type, status, approval_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 'approved')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 'approved')
       `;
 
       params = [
@@ -138,7 +139,27 @@ export const createEvent = async (req, res) => {
       'SELECT * FROM event WHERE id = ?',
       [result.insertId]
     );
+// After event is created
 
+// Get all active students at this mosque
+const [students] = await db.execute(`
+  SELECT DISTINCT e.student_id, u.full_name
+  FROM enrollment e
+  JOIN course c ON e.course_id = c.id
+  JOIN user u ON e.student_id = u.id
+  WHERE c.mosque_id = ?
+    AND e.status = 'active'
+`, [mosque_id]);
+
+for (const student of students) {
+  await notifyUser(student.student_id, {
+    type: 'system',
+    title: 'New Event',
+    message: `${title } - ${event_date}`,
+    link: `/events/${result.insertId}`,
+    icon: '📅'
+  });
+}
     res.json({
       success: true,
       message: 'Event created successfully',

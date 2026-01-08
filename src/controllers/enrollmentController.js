@@ -5,6 +5,8 @@
 import { EnrollmentModel } from "../models/enrollmentModel.js";
 import { CourseModel } from "../models/CourseModel.js";
 import db from "../config/db.js";
+import { notifyUser } from './firebaseNotificationController.js'; 
+
 
 /**
  * Check enrollment eligibility
@@ -75,6 +77,49 @@ export const enrollInFreeCourse = async (req, res) => {
         const enrollmentResult = await EnrollmentModel.enrollStudent(studentId, courseId, null);
 
         if (!enrollmentResult.success) {
+             await notifyUser(studentId, {
+    type: 'course',
+    title: 'Enrollment Successful',
+    message: `You are now enrolled in ${course.name}`,
+    link: `/enrollments`,
+    icon: '✅'
+  });
+
+  // 2. Notify the teacher (if assigned)
+  if (course.teacher_id) {
+    const [students] = await db.execute(`
+      SELECT full_name FROM user WHERE id = ?
+    `, [studentId]);
+    
+    await notifyUser(course.teacher_id, {
+      type: 'course',
+      title: 'New Student Enrolled',
+      message: `${students[0]?.full_name} enrolled in your course: ${course.name}`,
+      link: `/courses/${courseId}`,
+      icon: '👥'
+    });
+  }
+
+  // 3. Notify parent (if exists)
+  const [parents] = await db.execute(`
+    SELECT parent_id 
+    FROM parent_child_relationship 
+    WHERE child_id = ? AND is_verified = 1
+  `, [studentId]);
+
+  for (const parent of parents) {
+    const [students] = await db.execute(`
+      SELECT full_name FROM user WHERE id = ?
+    `, [studentId]);
+    
+    await notifyUser(parent.parent_id, {
+      type: 'course',
+      title: 'Child Enrolled in Course',
+      message: `${students[0]?.full_name} enrolled in ${course.name}`,
+      link: `/my-children`,
+      icon: '📚'
+    });
+  }
             return res.status(400).json({
                 success: false,
                 message: enrollmentResult.error
@@ -271,7 +316,50 @@ export const completeEnrollmentAfterPayment = async (req, res) => {
                 message: enrollmentResult.error
             });
         }
+ // 1. Notify student
+  await notifyUser(studentId, {
+    type: 'payment',
+    title: 'Payment Successful',
+    message: `You are now enrolled in ${course.name}`,
+    link: `/enrollments`,
+    icon: '💳'
+  });
 
+  // 2. Notify teacher
+  if (course.teacher_id) {
+    const [students] = await db.execute(`
+      SELECT full_name FROM user WHERE id = ?
+    `, [studentId]);
+    
+    await notifyUser(course.teacher_id, {
+      type: 'course',
+      title: 'New Paid Student Enrolled',
+      message: `${students[0]?.full_name} enrolled in your course: ${course.name}`,
+      link: `/courses/${courseId}`,
+      icon: '💰'
+    });
+  }
+
+  // 3. Notify parent
+  const [parents] = await db.execute(`
+    SELECT parent_id 
+    FROM parent_child_relationship 
+    WHERE child_id = ? AND is_verified = 1
+  `, [studentId]);
+
+  for (const parent of parents) {
+    const [students] = await db.execute(`
+      SELECT full_name FROM user WHERE id = ?
+    `, [studentId]);
+    
+    await notifyUser(parent.parent_id, {
+      type: 'payment',
+      title: 'Child Enrollment Payment Completed',
+      message: `${students[0]?.full_name} enrolled in ${course.name} (${(course.price_cents / 100).toFixed(2)} USD)`,
+      link: `/my-children`,
+      icon: '💳'
+    });
+  }
         res.status(201).json({
             success: true,
             message: "Payment successful! You are now enrolled.",

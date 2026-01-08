@@ -5,18 +5,18 @@
 import db from "../config/db.js";
 
 class DonationModel {
-  
+
   // Create a new donation record in the database
   static async create(donationData) {
-    const { 
-      event_id, 
-      donor_id, 
-      payment_id, 
-      amount_cents, 
-      is_anonymous, 
+    const {
+      event_id,
+      donor_id,
+      payment_id,
+      amount_cents,
+      is_anonymous,
       donor_message,
       stripe_payment_id,
-      stripe_charge_id 
+      stripe_charge_id
     } = donationData;
 
     const query = `
@@ -26,11 +26,11 @@ class DonationModel {
     `;
 
     const [result] = await db.execute(query, [
-      event_id, 
-      donor_id, 
-      payment_id, 
-      amount_cents, 
-      is_anonymous || 0, 
+      event_id,
+      donor_id,
+      payment_id,
+      amount_cents,
+      is_anonymous || 0,
       donor_message || null,
       stripe_payment_id,
       stripe_charge_id
@@ -158,7 +158,7 @@ class DonationModel {
   // Generate next receipt number
   static async getNextReceiptNumber() {
     const currentYear = new Date().getFullYear();
-    
+
     // Get or create sequence for current year
     const getQuery = `
       SELECT next_number 
@@ -166,9 +166,9 @@ class DonationModel {
       WHERE year = ?
       FOR UPDATE
     `;
-    
+
     const [rows] = await db.execute(getQuery, [currentYear]);
-    
+
     let nextNumber;
     if (rows.length === 0) {
       // Create new sequence for this year
