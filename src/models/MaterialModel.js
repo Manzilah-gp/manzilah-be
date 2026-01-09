@@ -3,35 +3,32 @@ import db from '../config/db.js';
 export const MaterialModel = {
 
     /**
-     * Create material record
+     * Create material record (UPDATED)
      */
     async createMaterial(materialData) {
         const {
             courseId, sectionId, uploadedBy, title, description,
             materialLabel, fileName, fileSize, fileType,
-            firebaseUrl, firebasePath
+            localUrl, localPath // UPDATED: Changed from firebase fields
         } = materialData;
 
         const [result] = await db.execute(`
             INSERT INTO COURSE_MATERIAL 
             (course_id, section_id, uploaded_by, title, description, 
              material_label, file_name, file_size, file_type, 
-             firebase_url, firebase_path)
+             local_url, local_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             courseId, sectionId, uploadedBy, title, description,
             materialLabel, fileName, fileSize, fileType,
-            firebaseUrl, firebasePath
+            localUrl, localPath
         ]);
 
         return result.insertId;
     },
 
-    /**
-     * Get all materials for a course (organized by sections)
-     */
+    // All other methods remain THE SAME
     async getCourseMaterials(courseId) {
-        // Get sections
         const [sections] = await db.execute(`
             SELECT id, section_name, section_order
             FROM MATERIAL_SECTION
@@ -39,7 +36,6 @@ export const MaterialModel = {
             ORDER BY section_order ASC, id ASC
         `, [courseId]);
 
-        // Get materials without section
         const [ungroupedMaterials] = await db.execute(`
             SELECT 
                 cm.*,
@@ -50,7 +46,6 @@ export const MaterialModel = {
             ORDER BY cm.created_at DESC
         `, [courseId]);
 
-        // Get materials for each section
         const sectionsWithMaterials = await Promise.all(
             sections.map(async (section) => {
                 const [materials] = await db.execute(`
@@ -76,9 +71,6 @@ export const MaterialModel = {
         };
     },
 
-    /**
-     * Get material by ID
-     */
     async getMaterialById(materialId) {
         const [materials] = await db.execute(`
             SELECT * FROM COURSE_MATERIAL WHERE id = ?
@@ -87,38 +79,26 @@ export const MaterialModel = {
         return materials[0] || null;
     },
 
-    /**
-     * Delete material
-     */
     async deleteMaterial(materialId) {
         await db.execute(`
             DELETE FROM COURSE_MATERIAL WHERE id = ?
         `, [materialId]);
     },
 
-    /**
-     * Track download
-     */
     async trackDownload(materialId, userId) {
-        // Increment download count
         await db.execute(`
             UPDATE COURSE_MATERIAL 
             SET download_count = download_count + 1
             WHERE id = ?
         `, [materialId]);
 
-        // Log download
         await db.execute(`
             INSERT INTO MATERIAL_DOWNLOAD_LOG (material_id, user_id)
             VALUES (?, ?)
         `, [materialId, userId]);
     },
 
-    /**
-     * Verify user has access to course materials
-     */
     async verifyUserAccess(userId, courseId, userRoles) {
-        // Teachers can access if they teach the course
         if (userRoles.includes('teacher')) {
             const [courses] = await db.execute(`
                 SELECT id FROM COURSE WHERE id = ? AND teacher_id = ?
@@ -127,7 +107,6 @@ export const MaterialModel = {
             if (courses.length > 0) return true;
         }
 
-        // Students can access if enrolled
         if (userRoles.includes('student')) {
             const [enrollments] = await db.execute(`
                 SELECT id FROM ENROLLMENT 
@@ -140,9 +119,6 @@ export const MaterialModel = {
         return false;
     },
 
-    /**
-     * Verify teacher owns course
-     */
     async verifyCourseTeacher(teacherId, courseId) {
         const [courses] = await db.execute(`
             SELECT id FROM COURSE WHERE id = ? AND teacher_id = ?
@@ -151,9 +127,6 @@ export const MaterialModel = {
         return courses.length > 0;
     },
 
-    /**
-     * Section Management
-     */
     async createSection(sectionData) {
         const { courseId, sectionName, sectionOrder } = sectionData;
 
@@ -187,7 +160,6 @@ export const MaterialModel = {
     },
 
     async deleteSection(sectionId) {
-        // Materials will cascade delete or set to NULL based on FK constraint
         await db.execute(`
             DELETE FROM MATERIAL_SECTION WHERE id = ?
         `, [sectionId]);

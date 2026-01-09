@@ -235,9 +235,7 @@ async function getTeacherData(userId) {
                 has_tajweed_certificate,
                 has_sharea_certificate,
                 tajweed_certificate_url,
-                sharea_certificate_url,
-\                preferred_teaching_format,
-                status
+                sharea_certificate_url
             FROM TEACHER_CERTIFICATION
             WHERE user_id = ?
         `, [userId]);
@@ -267,30 +265,26 @@ async function getTeacherData(userId) {
         // Get current students
         const [studentCount] = await db.query(`
             SELECT COUNT(DISTINCT student_id) as current_students
-            FROM ENROLLMENT
-            WHERE teacher_id = ? AND status = 'active'
+            FROM ENROLLMENT e
+            JOIN COURSE c ON e.course_id = c.id
+            WHERE c.teacher_id = ? AND e.status = 'active'
         `, [userId]);
 
         // Get completed courses
         const [completedCourses] = await db.query(`
             SELECT COUNT(*) as completed_courses
-            FROM ENROLLMENT
-            WHERE teacher_id = ? AND status = 'completed'
-        `, [userId]);
-
-        // Get average rating
-        const [avgRating] = await db.query(`
-            SELECT AVG(rating) as average_rating, COUNT(*) as total_ratings
-            FROM EVALUATION
-            WHERE evaluatee_id = ?
+            FROM ENROLLMENT e
+            JOIN COURSE c ON e.course_id = c.id
+            WHERE c.teacher_id = ? AND e.status = 'completed'
         `, [userId]);
 
         // Get preferred mosques
+        // Assuming role_id 3 is relevant for this query (e.g., Mosque Admin or similar association)
         const [preferredMosques] = await db.query(`
             SELECT m.id, m.name
-            FROM TEACHER_PREFERRED_MOSQUE tpm
-            JOIN MOSQUE m ON tpm.mosque_id = m.id
-            WHERE tpm.teacher_id = ?
+            FROM ROLE_ASSIGNMENT ra
+            JOIN MOSQUE m ON ra.mosque_id = m.id
+            WHERE ra.user_id = ? AND ra.role_id = 3
         `, [userId]);
 
         return {
@@ -299,12 +293,11 @@ async function getTeacherData(userId) {
             availability,
             current_students: studentCount[0]?.current_students || 0,
             completed_courses: completedCourses[0]?.completed_courses || 0,
-            average_rating: parseFloat(avgRating[0]?.average_rating || 0).toFixed(1),
-            total_ratings: avgRating[0]?.total_ratings || 0,
             preferred_mosques: preferredMosques
         };
     } catch (error) {
         console.error('Error getting teacher data:', error);
+        if (error.sqlMessage) console.error('SQL Error Message:', error.sqlMessage);
         return null;
     }
 }

@@ -29,7 +29,6 @@ import parentRoutes from './routes/parentRoutes.js';
 import firebaseNotificationRoutes from './routes/firebaseNotificationRoutes.js';
 
 
-// import videoCallRoutes from "./routes/videoCallRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +76,8 @@ app.use("/api/video-calls", videoCallRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/teacher", teacherCoursesRoutes);
 app.use("/api/materials", materialRoutes);
+app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads/materials')));
+
 
 
 // Default route

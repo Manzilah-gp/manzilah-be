@@ -123,7 +123,7 @@ CREATE TABLE TEACHER_CERTIFICATION (
     sharea_certificate_url VARCHAR(500),
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE,
-    INDEX idx_teacher_user (user_id),
+    INDEX idx_teacher_user (user_id)
 );
 
 CREATE TABLE COURSE_TYPE (
@@ -937,8 +937,8 @@ CREATE TABLE COURSE_MATERIAL (
     file_name VARCHAR(255) NOT NULL,
     file_size INT, -- bytes
     file_type VARCHAR(50), -- 'pdf', 'image', 'document'
-    firebase_url VARCHAR(500) NOT NULL, -- Firebase Storage URL
-    firebase_path VARCHAR(500), -- Path in Firebase for deletion
+    local_url VARCHAR(500) NOT NULL, -- Firebase Storage URL
+    local_path VARCHAR(500), -- Path in Firebase for deletion
     download_count INT DEFAULT 0,
     is_visible BOOLEAN DEFAULT TRUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

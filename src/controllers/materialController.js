@@ -1,9 +1,14 @@
 import { MaterialModel } from '../models/MaterialModel.js';
-import { bucket } from '../config/firebaseAdmin.js';
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
- * Upload material to Firebase Storage
+ * Upload material to local server storage
  */
 export const uploadMaterial = async (req, res) => {
     try {
@@ -25,69 +30,50 @@ export const uploadMaterial = async (req, res) => {
             });
         }
 
-        // Generate unique filename
-        const timestamp = Date.now();
-        const filename = `${timestamp}_${file.originalname}`;
-        const firebasePath = `course-materials/${courseId}/${filename}`;
+        // File is already saved by multer
+        // Generate relative path for database (without full server path)
+        const relativePath = path.relative(
+            path.join(__dirname, '../../'),
+            file.path
+        );
 
-        // Upload to Firebase
-        const fileUpload = bucket.file(firebasePath);
-        const blobStream = fileUpload.createWriteStream({
-            metadata: {
-                contentType: file.mimetype,
-                metadata: {
-                    uploadedBy: teacherId.toString(),
-                    courseId: courseId.toString()
-                }
+        // Generate public URL for downloading
+        const publicUrl = `/uploads/materials/course_${courseId}/${file.filename}`;
+
+        // Save to database
+        const materialData = {
+            courseId,
+            sectionId: sectionId || null,
+            uploadedBy: teacherId,
+            title,
+            description: description || null,
+            materialLabel: materialLabel || 'General',
+            fileName: file.originalname,
+            fileSize: file.size,
+            fileType: getFileType(file.mimetype),
+            localUrl: publicUrl,
+            localPath: relativePath
+        };
+
+        const materialId = await MaterialModel.createMaterial(materialData);
+
+        res.status(201).json({
+            success: true,
+            message: 'Material uploaded successfully',
+            data: {
+                id: materialId,
+                url: publicUrl
             }
         });
 
-        blobStream.on('error', (error) => {
-            console.error('Firebase upload error:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to upload to Firebase'
-            });
-        });
-
-        blobStream.on('finish', async () => {
-            // Make file publicly accessible
-            await fileUpload.makePublic();
-
-            // Get public URL
-            const publicUrl = `https://storage.googleapis.com/${bucket.name}/${firebasePath}`;
-
-            // Save to database
-            const materialData = {
-                courseId,
-                sectionId: sectionId || null,
-                uploadedBy: teacherId,
-                title,
-                description: description || null,
-                materialLabel: materialLabel || 'General',
-                fileName: file.originalname,
-                fileSize: file.size,
-                fileType: getFileType(file.mimetype),
-                firebaseUrl: publicUrl,
-                firebasePath
-            };
-
-            const materialId = await MaterialModel.createMaterial(materialData);
-
-            res.status(201).json({
-                success: true,
-                message: 'Material uploaded successfully',
-                data: {
-                    id: materialId,
-                    url: publicUrl
-                }
-            });
-        });
-
-        blobStream.end(file.buffer);
-
     } catch (error) {
         console.error('Upload material error:', error);
+
+        // Clean up file if database insertion fails
+        if (req.file && req.file.path) {
+            fs.unlinkSync(req.file.path);
+        }
+
         res.status(500).json({
             success: false,
             message: 'Failed to upload material',
@@ -97,7 +83,7 @@ export const uploadMaterial = async (req, res) => {
 };
 
 /**
- * Get all materials for a course
+ * Get all materials for a course (NO CHANGES NEEDED)
  */
 export const getCourseMaterials = async (req, res) => {
     try {
@@ -105,7 +91,6 @@ export const getCourseMaterials = async (req, res) => {
         const userId = req.user.id;
         const userRoles = req.user.roles || [];
 
-        // Verify user has access to course
         const hasAccess = await MaterialModel.verifyUserAccess(userId, courseId, userRoles);
 
         if (!hasAccess) {
@@ -115,7 +100,6 @@ export const getCourseMaterials = async (req, res) => {
             });
         }
 
-        // Get materials organized by sections
         const materials = await MaterialModel.getCourseMaterials(courseId);
 
         res.status(200).json({
@@ -134,14 +118,13 @@ export const getCourseMaterials = async (req, res) => {
 };
 
 /**
- * Delete material
+ * Delete material (UPDATED)
  */
 export const deleteMaterial = async (req, res) => {
     try {
         const { materialId } = req.params;
         const teacherId = req.user.id;
 
-        // Get material info
         const material = await MaterialModel.getMaterialById(materialId);
 
         if (!material) {
@@ -151,7 +134,6 @@ export const deleteMaterial = async (req, res) => {
             });
         }
 
-        // Verify ownership
         if (material.uploaded_by !== teacherId) {
             return res.status(403).json({
                 success: false,
@@ -159,12 +141,10 @@ export const deleteMaterial = async (req, res) => {
             });
         }
 
-        // Delete from Firebase
-        try {
-            await bucket.file(material.firebase_path).delete();
-        } catch (firebaseError) {
-            console.warn('Firebase deletion warning:', firebaseError.message);
-            // Continue even if Firebase deletion fails
+        // Delete physical file
+        const filePath = path.join(__dirname, '../../', material.local_path);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
         }
 
         // Delete from database
@@ -186,7 +166,64 @@ export const deleteMaterial = async (req, res) => {
 };
 
 /**
- * Track material download
+ * Download/serve material file (NEW)
+ */
+export const downloadMaterial = async (req, res) => {
+    try {
+        const { materialId } = req.params;
+        const userId = req.user.id;
+
+        const material = await MaterialModel.getMaterialById(materialId);
+
+        if (!material) {
+            return res.status(404).json({
+                success: false,
+                message: 'Material not found'
+            });
+        }
+
+        // Verify user has access
+        const userRoles = req.user.roles || [];
+        const hasAccess = await MaterialModel.verifyUserAccess(
+            userId,
+            material.course_id,
+            userRoles
+        );
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied'
+            });
+        }
+
+        // Track download
+        await MaterialModel.trackDownload(materialId, userId);
+
+        // Serve file
+        const filePath = path.join(__dirname, '../../', material.local_path);
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'File not found on server'
+            });
+        }
+
+        res.download(filePath, material.file_name);
+
+    } catch (error) {
+        console.error('Download material error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to download material',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Track download (NO CHANGES)
  */
 export const trackDownload = async (req, res) => {
     try {
@@ -209,9 +246,7 @@ export const trackDownload = async (req, res) => {
     }
 };
 
-/**
- * Create material section
- */
+// Section management methods (NO CHANGES)
 export const createSection = async (req, res) => {
     try {
         const { courseId, sectionName, sectionOrder } = req.body;
@@ -224,7 +259,6 @@ export const createSection = async (req, res) => {
             });
         }
 
-        // Verify teacher owns the course
         const ownsCourse = await MaterialModel.verifyCourseTeacher(teacherId, courseId);
 
         if (!ownsCourse) {
@@ -256,13 +290,9 @@ export const createSection = async (req, res) => {
     }
 };
 
-/**
- * Get sections for a course
- */
 export const getSections = async (req, res) => {
     try {
         const { courseId } = req.params;
-
         const sections = await MaterialModel.getSections(courseId);
 
         res.status(200).json({
@@ -280,9 +310,6 @@ export const getSections = async (req, res) => {
     }
 };
 
-/**
- * Update section
- */
 export const updateSection = async (req, res) => {
     try {
         const { sectionId } = req.params;
@@ -308,13 +335,9 @@ export const updateSection = async (req, res) => {
     }
 };
 
-/**
- * Delete section
- */
 export const deleteSection = async (req, res) => {
     try {
         const { sectionId } = req.params;
-
         await MaterialModel.deleteSection(sectionId);
 
         res.status(200).json({
