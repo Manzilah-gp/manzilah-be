@@ -125,24 +125,6 @@ class DonationModel {
     return stats[0];
   }
 
-  // Get top donors for an event (excluding anonymous)
-  static async getTopDonors(eventId, limit = 10) {
-    const query = `
-      SELECT 
-        u.full_name,
-        SUM(ed.amount_cents) as total_donated_cents,
-        COUNT(*) as donation_count
-      FROM event_donation ed
-      LEFT JOIN user u ON ed.donor_id = u.id
-      WHERE ed.event_id = ? AND ed.is_anonymous = 0
-      GROUP BY ed.donor_id
-      ORDER BY total_donated_cents DESC
-      LIMIT ?
-    `;
-
-    const [donors] = await db.execute(query, [eventId, limit]);
-    return donors;
-  }
 
   // Update receipt URL after generating receipt
   static async updateReceiptUrl(donationId, receiptUrl) {

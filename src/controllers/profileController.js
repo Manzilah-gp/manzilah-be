@@ -235,19 +235,18 @@ async function getTeacherData(userId) {
                 has_tajweed_certificate,
                 has_sharea_certificate,
                 tajweed_certificate_url,
-                sharea_certificate_url,
-\                preferred_teaching_format,
-                status
+                sharea_certificate_url
             FROM TEACHER_CERTIFICATION
             WHERE user_id = ?
         `, [userId]);
 
-        // Get expertise
+        // Get expertise WITH years_experience
         const [expertise] = await db.query(`
             SELECT 
                 ct.name as course_type,
                 te.hourly_rate_cents,
                 te.is_memorization_selected,
+                te.years_experience,
                 ml.level_name as max_level
             FROM TEACHER_EXPERTISE te
             JOIN COURSE_TYPE ct ON te.course_type_id = ct.id
@@ -266,42 +265,37 @@ async function getTeacherData(userId) {
 
         // Get current students
         const [studentCount] = await db.query(`
-            SELECT COUNT(DISTINCT student_id) as current_students
-            FROM ENROLLMENT
-            WHERE teacher_id = ? AND status = 'active'
+            SELECT COUNT(DISTINCT e.student_id) as current_students
+            FROM ENROLLMENT e
+            JOIN COURSE c ON e.course_id = c.id
+            WHERE c.teacher_id = ? AND e.status = 'active'
         `, [userId]);
 
         // Get completed courses
         const [completedCourses] = await db.query(`
             SELECT COUNT(*) as completed_courses
-            FROM ENROLLMENT
-            WHERE teacher_id = ? AND status = 'completed'
+            FROM ENROLLMENT e
+            JOIN COURSE c ON e.course_id = c.id
+            WHERE c.teacher_id = ? AND e.status = 'completed'
         `, [userId]);
 
-        // Get average rating
-        const [avgRating] = await db.query(`
-            SELECT AVG(rating) as average_rating, COUNT(*) as total_ratings
-            FROM EVALUATION
-            WHERE evaluatee_id = ?
-        `, [userId]);
+   
 
-        // Get preferred mosques
-        const [preferredMosques] = await db.query(`
-            SELECT m.id, m.name
-            FROM TEACHER_PREFERRED_MOSQUE tpm
-            JOIN MOSQUE m ON tpm.mosque_id = m.id
-            WHERE tpm.teacher_id = ?
-        `, [userId]);
+        // Calculate max years_experience
+        const maxExperience = expertise.length > 0 
+            ? Math.max(...expertise.map(e => e.years_experience || 0))
+            : 0;
 
         return {
-            certifications: certifications[0] || {},
+            certifications: {
+                ...(certifications[0] || {}),
+                experience_years: maxExperience
+            },
             expertise,
             availability,
             current_students: studentCount[0]?.current_students || 0,
             completed_courses: completedCourses[0]?.completed_courses || 0,
-            average_rating: parseFloat(avgRating[0]?.average_rating || 0).toFixed(1),
-            total_ratings: avgRating[0]?.total_ratings || 0,
-            preferred_mosques: preferredMosques
+      
         };
     } catch (error) {
         console.error('Error getting teacher data:', error);
@@ -413,7 +407,6 @@ async function getMinistryAdminData(userId) {
         const [stats] = await db.query(`
             SELECT 
                 (SELECT COUNT(*) FROM MOSQUE) as total_mosques,
-                (SELECT COUNT(*) FROM USER WHERE approved = TRUE) as total_users,
                 (SELECT COUNT(*) FROM COURSE WHERE is_active = TRUE) as total_courses,
                 (SELECT COUNT(*) FROM ENROLLMENT WHERE status = 'active') as active_enrollments
         `);

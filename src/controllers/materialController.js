@@ -1,5 +1,5 @@
 import { MaterialModel } from '../models/MaterialModel.js';
-import { bucket } from '../config/firebaseAdmin.js';
+import { bucket } from '../config/firebase.js';
 import path from 'path';
 
 /**
