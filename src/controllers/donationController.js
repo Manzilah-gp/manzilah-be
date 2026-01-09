@@ -334,12 +334,10 @@ export const getEventStats = async (req, res) => {
     }
 
     const stats = await DonationModel.getEventStatistics(event_id);
-    const topDonors = await DonationModel.getTopDonors(event_id, 10);
 
     res.json({
       success: true,
       statistics: stats,
-      top_donors: topDonors
     });
 
   } catch (error) {

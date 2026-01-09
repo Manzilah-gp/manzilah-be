@@ -268,7 +268,6 @@ export const login = async (req, res) => {
                 roles,
                 activeRoles,
                 children,
-                approved: user.approved
             }
         });
 

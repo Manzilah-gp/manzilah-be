@@ -27,6 +27,7 @@ import materialRoutes from "./routes/materialRoutes.js";
 import teacherProfileRoutes from "./routes/teacherProfileRoutes.js";
 import parentRoutes from './routes/parentRoutes.js';
 import firebaseNotificationRoutes from './routes/firebaseNotificationRoutes.js';
+import parentProgressRoutes from './routes/parentProgressRoutes.js';
 
 
 
@@ -76,6 +77,7 @@ app.use("/api/video-calls", videoCallRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/teacher", teacherCoursesRoutes);
 app.use("/api/materials", materialRoutes);
+app.use('/api/parent-progress', parentProgressRoutes);
 app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads/materials')));
 
 
