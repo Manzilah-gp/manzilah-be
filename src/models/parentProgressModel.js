@@ -10,32 +10,66 @@ export const ParentProgressModel = {
      * Returns basic info plus enrollment counts
      */
     async getParentChildren(parentId) {
-        const [children] = await db.execute(`
+    // Get children with basic info
+    const [children] = await db.execute(`
+        SELECT 
+            u.id as child_id,
+            u.full_name,
+            u.email,
+            u.phone,
+            u.dob,
+            TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as age,
+            COUNT(DISTINCT e.id) as total_enrollments,
+            COUNT(DISTINCT CASE WHEN e.status = 'active' THEN e.id END) as active_enrollments,
+            COUNT(DISTINCT CASE WHEN e.status = 'completed' THEN e.id END) as completed_enrollments
+        FROM PARENT_CHILD_RELATIONSHIP pcr
+        JOIN USER u ON pcr.child_id = u.id
+        LEFT JOIN ENROLLMENT e ON u.id = e.student_id
+        WHERE pcr.parent_id = ? AND pcr.is_verified = TRUE
+        GROUP BY u.id
+        ORDER BY u.full_name ASC
+    `, [parentId]);
+
+    // Calculate correct average for each child
+    for (const child of children) {
+        const [enrollments] = await db.execute(`
             SELECT 
-                u.id as child_id,
-                u.full_name,
-                u.email,
-                u.phone,
-                u.dob,
-                TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as age,
-                -- Count enrollments
-                COUNT(DISTINCT e.id) as total_enrollments,
-                COUNT(DISTINCT CASE WHEN e.status = 'active' THEN e.id END) as active_enrollments,
-                COUNT(DISTINCT CASE WHEN e.status = 'completed' THEN e.id END) as completed_enrollments,
-                -- Average progress across all enrollments
-                COALESCE(AVG(sp.completion_percentage), 0) as avg_progress
-            FROM PARENT_CHILD_RELATIONSHIP pcr
-            JOIN USER u ON pcr.child_id = u.id
-            LEFT JOIN ENROLLMENT e ON u.id = e.student_id
+                ct.name as course_type,
+                sp.completion_percentage,
+                (SELECT COUNT(*) FROM COURSE_ATTENDANCE ca 
+                 WHERE ca.enrollment_id = e.id AND ca.status = 'present') as present_count,
+                (SELECT COUNT(*) FROM COURSE_ATTENDANCE ca 
+                 WHERE ca.enrollment_id = e.id) as total_sessions
+            FROM ENROLLMENT e
+            JOIN COURSE c ON e.course_id = c.id
+            JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
-            WHERE pcr.parent_id = ? AND pcr.is_verified = TRUE
-            GROUP BY u.id
-            ORDER BY u.full_name ASC
-        `, [parentId]);
+            WHERE e.student_id = ? AND e.status = 'active'
+        `, [child.child_id]);
 
-        return children;
-    },
+        let totalProgress = 0;
+        let count = 0;
 
+        enrollments.forEach(enrollment => {
+            let progress = 0;
+            
+            if (enrollment.course_type === 'memorization') {
+                progress = enrollment.completion_percentage || 0;
+            } else {
+                const present = parseInt(enrollment.present_count) || 0;
+                const total = parseInt(enrollment.total_sessions) || 0;
+                progress = total > 0 ? Math.round((present / total) * 100) : 0;
+            }
+
+            totalProgress += progress;
+            count++;
+        });
+
+        child.avg_progress = count > 0 ? Math.round(totalProgress / count) : 0;
+    }
+
+    return children;
+},
     /**
      * Verify parent has access to this enrollment
      * Check if enrollment belongs to parent's child
@@ -283,6 +317,7 @@ progress.attendance = {
         if (childInfo.length === 0) return null;
 
         // Get all enrollments for this child
+       // Get all enrollments for this child
         const [enrollments] = await db.execute(`
             SELECT 
                 e.id as enrollment_id,
@@ -316,9 +351,29 @@ progress.attendance = {
             ORDER BY e.enrollment_date DESC
         `, [childId]);
 
+        // ✅ CALCULATE CORRECT PROGRESS FOR EACH ENROLLMENT
+        const processedEnrollments = enrollments.map(enrollment => {
+            let progress = 0;
+            
+            if (enrollment.course_type === 'memorization') {
+                // For memorization: use completion_percentage
+                progress = enrollment.completion_percentage || 0;
+            } else {
+                // For other courses: calculate from attendance
+                const present = parseInt(enrollment.present_count) || 0;
+                const total = parseInt(enrollment.total_sessions) || 0;
+                progress = total > 0 ? Math.round((present / total) * 100) : 0;
+            }
+
+            return {
+                ...enrollment,
+                progress  // Add calculated progress field
+            };
+        });
+
         return {
             child: childInfo[0],
-            enrollments
+            enrollments: processedEnrollments  // ✅ Use processed enrollments
         };
     }
 };

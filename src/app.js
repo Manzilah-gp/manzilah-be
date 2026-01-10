@@ -28,6 +28,7 @@ import teacherProfileRoutes from "./routes/teacherProfileRoutes.js";
 import parentRoutes from './routes/parentRoutes.js';
 import firebaseNotificationRoutes from './routes/firebaseNotificationRoutes.js';
 import parentProgressRoutes from './routes/parentProgressRoutes.js';
+import studentProgressRoutes from './routes/studentProgressRoutes.js';
 
 
 
@@ -79,6 +80,7 @@ app.use("/api/teacher", teacherCoursesRoutes);
 app.use("/api/materials", materialRoutes);
 app.use('/api/parent-progress', parentProgressRoutes);
 app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads/materials')));
+app.use('/api/student-progress', studentProgressRoutes);
 
 
 
