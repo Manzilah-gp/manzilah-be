@@ -194,32 +194,78 @@ export const updateUserLocation = async (req, res) => {
 
 async function getStudentData(userId) {
     try {
+        // Get enrollments with proper progress calculation
         const [enrollments] = await db.query(`
             SELECT 
                 e.id as enrollment_id,
                 c.name as course_name,
                 ct.name as course_type,
-                u.full_name as teacher_name,
-                c.course_level,
-                e.enrollment_date,
+                COALESCE(u.full_name, 'Not Assigned') as teacher_name,
                 e.status,
-                COALESCE(
-                    (SELECT AVG(sp.completion_percentage) 
-                     FROM STUDENT_PROGRESS sp 
-                     WHERE sp.enrollment_id = e.id), 0
-                ) as progress
+                -- Get progress from STUDENT_PROGRESS table
+                COALESCE(sp.completion_percentage, 0) as progress,
+                sp.current_page,
+                sp.level_start_page,
+                sp.level_end_page,
+                -- For memorization courses
+                ml.level_name as current_level,
+                -- For attendance-based courses
+                (SELECT COUNT(*) FROM COURSE_ATTENDANCE ca 
+                 WHERE ca.enrollment_id = e.id AND ca.status = 'present') as present_count,
+                (SELECT COUNT(*) FROM COURSE_ATTENDANCE ca 
+                 WHERE ca.enrollment_id = e.id) as total_attendance_records
             FROM ENROLLMENT e
             JOIN COURSE c ON e.course_id = c.id
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             LEFT JOIN USER u ON c.teacher_id = u.id
+            LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
+            LEFT JOIN MEMORIZATION_LEVEL ml ON c.course_level = ml.id
             WHERE e.student_id = ?
         `, [userId]);
 
+        // Calculate proper progress for each enrollment
+        const processedEnrollments = enrollments.map(enrollment => {
+            let calculatedProgress = 0;
+
+            if (enrollment.course_type === 'memorization') {
+                // For memorization: use completion_percentage from STUDENT_PROGRESS
+                calculatedProgress = enrollment.progress || 0;
+            } else {
+                // For other courses: calculate from attendance
+                const present = parseInt(enrollment.present_count) || 0;
+                const total = parseInt(enrollment.total_attendance_records) || 0;
+                calculatedProgress = total > 0 ? Math.round((present / total) * 100) : 0;
+            }
+
+            return {
+                enrollment_id: enrollment.enrollment_id,
+                course_name: enrollment.course_name,
+                course_type: enrollment.course_type,
+                teacher_name: enrollment.teacher_name,
+                status: enrollment.status,
+                progress: calculatedProgress,  // ✅ Correctly calculated!
+                current_level: enrollment.current_level
+            };
+        });
+
+        // Calculate overall attendance rate
+        let totalPresent = 0;
+        let totalSessions = 0;
+
+        enrollments.forEach(enrollment => {
+            totalPresent += parseInt(enrollment.present_count) || 0;
+            totalSessions += parseInt(enrollment.total_attendance_records) || 0;
+        });
+
+        const attendanceRate = totalSessions > 0 
+            ? Math.round((totalPresent / totalSessions) * 100) 
+            : 0;
+
         return {
-            enrollments,
-            attendance_rate: 0,  // ← Set to 0 since ATTENDANCE table doesn't exist
-            total_sessions: 0,
-            sessions_attended: 0,
+            enrollments: processedEnrollments,
+            attendance_rate: attendanceRate,  // ✅ Calculated from actual data
+            total_sessions: totalSessions,
+            sessions_attended: totalPresent,
         };
     } catch (error) {
         console.error('Error getting student data:', error);
@@ -306,19 +352,13 @@ async function getTeacherData(userId) {
 
 async function getParentData(userId) {
     try {
+        // Get children basic info (removed progress calculation from query)
         const [children] = await db.query(`
             SELECT 
                 u.id,
                 u.full_name as name,
                 TIMESTAMPDIFF(YEAR, u.dob, CURDATE()) as age,
-                COUNT(DISTINCT e.course_id) as courses,
-                COALESCE(
-                    AVG(
-                        (SELECT AVG(sp.completion_percentage) 
-                         FROM STUDENT_PROGRESS sp 
-                         WHERE sp.enrollment_id = e.id)
-                    ), 0
-                ) as progress
+                COUNT(DISTINCT e.course_id) as courses
             FROM PARENT_CHILD_RELATIONSHIP pcr
             JOIN USER u ON pcr.child_id = u.id
             LEFT JOIN ENROLLMENT e ON u.id = e.student_id AND e.status = 'active'
@@ -326,6 +366,47 @@ async function getParentData(userId) {
             GROUP BY u.id, u.full_name, u.dob
         `, [userId]);
 
+        // Calculate correct progress for each child
+        for (const child of children) {
+            const [enrollments] = await db.query(`
+                SELECT 
+                    ct.name as course_type,
+                    sp.completion_percentage,
+                    (SELECT COUNT(*) FROM COURSE_ATTENDANCE ca 
+                     WHERE ca.enrollment_id = e.id AND ca.status = 'present') as present_count,
+                    (SELECT COUNT(*) FROM COURSE_ATTENDANCE ca 
+                     WHERE ca.enrollment_id = e.id) as total_sessions
+                FROM ENROLLMENT e
+                JOIN COURSE c ON e.course_id = c.id
+                JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
+                LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
+                WHERE e.student_id = ? AND e.status = 'active'
+            `, [child.id]);
+
+            let totalProgress = 0;
+            let enrollmentCount = 0;
+
+            enrollments.forEach(enrollment => {
+                let progress = 0;
+
+                if (enrollment.course_type === 'memorization') {
+                    progress = enrollment.completion_percentage || 0;
+                } else {
+                    const present = parseInt(enrollment.present_count) || 0;
+                    const total = parseInt(enrollment.total_sessions) || 0;
+                    progress = total > 0 ? Math.round((present / total) * 100) : 0;
+                }
+
+                totalProgress += progress;
+                enrollmentCount++;
+            });
+
+            child.progress = enrollmentCount > 0 
+                ? Math.round(totalProgress / enrollmentCount) 
+                : 0;
+        }
+
+        // Return in the EXACT same format as before
         return {
             children: children.map(child => ({
                 ...child,

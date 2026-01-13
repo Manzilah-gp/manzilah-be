@@ -28,7 +28,7 @@ router.get('/event/:event_id/stats', DonationController.getEventStats);
 router.get('/my-donations', DonationController.getDonorHistory);
 
 // Download receipt for a specific donation
-router.get('/receipt/:donation_id', DonationController.downloadReceipt);
+router.get('/:donation_id/receipt', verifyToken, DonationController.downloadReceipt);
 
 // Admin: Update fundraising goal for an event
 router.put('/event/:event_id/goal', DonationController.updateFundraisingGoal);
