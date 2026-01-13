@@ -32,6 +32,7 @@ export const StudentDashboardModel = {
                 c.target_age_group,
                 c.course_start_date,
                 c.course_end_date,
+                c.is_online_enabled,
                 
                 -- Course type
                 ct.name as course_type,

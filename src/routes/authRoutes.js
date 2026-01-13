@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, registerTeacher } from "../controllers/authController.js";
+import { register, login, registerTeacher, sendVerificationCode, changePassword } from "../controllers/authController.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 import db from "../config/db.js";
 
@@ -9,6 +9,8 @@ const router = express.Router();
 router.post("/register", register);
 router.post("/register-teacher", registerTeacher);
 router.post("/login", login);
+router.post('/change-password', changePassword);
+router.post('/send-code', sendVerificationCode);
 
 import UserModel from "../models/UserModel.js";
 

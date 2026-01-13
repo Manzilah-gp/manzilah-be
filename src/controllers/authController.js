@@ -4,16 +4,10 @@ import jwt from "jsonwebtoken";
 import db from "../config/db.js";
 import UserModel from "../models/UserModel.js";
 import TeacherModel from "../models/TeacherModel.js";
+import { sendEmail } from "../services/emailService.js";
 import dotenv from "dotenv";
 dotenv.config();
 
-const calculateIsChild = (dob) => {
-    const birthDate = new Date(dob);
-    const ageDifMs = Date.now() - birthDate.getTime();
-    const ageDate = new Date(ageDifMs);
-    const age = Math.abs(ageDate.getUTCFullYear() - 1970);
-    return age < 13;
-};
 
 /**
  * STANDARD USER REGISTRATION
@@ -56,7 +50,6 @@ export const register = async (req, res) => {
 
         // Hash password
         const password_hash = await bcrypt.hash(password, 10);
-        // const is_child = calculateIsChild(dob);
 
         // Create user
         const userId = await UserModel.createUser({
@@ -274,5 +267,121 @@ export const login = async (req, res) => {
     } catch (err) {
         console.error("❌ Login error:", err);
         res.status(500).json({ message: "Database error", error: err.message });
+    }
+};
+
+/**
+ * GENERATE AND SEND VERIFICATION CODE
+ */
+export const sendVerificationCode = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: "Email is required." });
+        }
+
+        const user = await UserModel.findByEmail(email);
+        if (!user) {
+            // For security, don't reveal if user exists
+            return res.json({
+                message: "If an account exists with this email, a verification code has been sent."
+            });
+        }
+
+        const userId = user.id;
+
+        // Generate 6 digit code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        // Expires in 15 minutes
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+        // Save to DB
+        await UserModel.saveVerificationCode(userId, code, expiresAt);
+
+        // Send Email
+        const subject = "Your Verification Code - Manzilah";
+        const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #333;">Password Reset Verification</h2>
+                <p>Hello,</p>
+                <p>You requested to reset your password. Use the verification code below:</p>
+                <div style="background-color: #f4f4f4; padding: 15px; text-align: center; margin: 20px 0;">
+                    <h1 style="margin: 0; color: #007bff; letter-spacing: 5px;">${code}</h1>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} Manzilah. All rights reserved.</p>
+            </div>
+        `;
+
+        await sendEmail(email, subject, html);
+
+        res.json({
+            message: "Verification code sent to your email.",
+            // Don't send code in production, only for testing
+            ...(process.env.NODE_ENV === 'development' && { code })
+        });
+
+    } catch (err) {
+        console.error("Error sending verification code:", err);
+
+        // Better error messages
+        if (err.message.includes('Failed to send email')) {
+            return res.status(500).json({
+                message: "Failed to send email. Please try again later."
+            });
+        }
+
+        res.status(500).json({ message: "Failed to send verification code." });
+    }
+};
+
+
+export const changePassword = async (req, res) => {
+    try {
+        const { email, code, newPassword } = req.body;
+
+        if (!email || !code || !newPassword) {
+            return res.status(400).json({ message: 'Email, verification code, and new password are required' });
+        }
+
+        const user = await UserModel.findByEmail(email);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const userId = user.id;
+
+        // 1. Verify Code
+        const record = await UserModel.getVerificationCode(userId);
+        if (!record) {
+            return res.status(400).json({ message: 'Invalid or expired verification code.' });
+        }
+
+        if (record.code !== code) {
+            return res.status(400).json({ message: 'Incorrect verification code.' });
+        }
+
+        if (new Date(record.expires_at) < new Date()) {
+            return res.status(400).json({ message: 'Verification code has expired.' });
+        }
+
+        // 2. Hash the new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        // 3. Update the password in DB
+        await UserModel.updatePassword(userId, hashedPassword);
+
+        // 4. Delete the used code
+        await UserModel.deleteVerificationCode(userId);
+
+        res.status(200).json({ message: 'Password updated successfully' });
+
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({ message: 'Internal server error' });
     }
 };

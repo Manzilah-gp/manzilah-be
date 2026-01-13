@@ -56,7 +56,7 @@ class UserModel {
     /**
      * Assign role to user
      */
-    static async assignRole(userId, roleId, mosqueId = null, isActive = false) {
+    static async assignRole(userId, roleId, mosqueId = null, isActive = true) {
         await db.query(
             "INSERT INTO ROLE_ASSIGNMENT (user_id, role_id, mosque_id, is_active) VALUES (?, ?, ?, ?)",
             [userId, roleId, mosqueId, isActive]
@@ -116,6 +116,91 @@ class UserModel {
         } catch (err) {
             console.error("❌ Error updating password:", err);
             throw err;
+        }
+    }
+
+    /**
+     * Retrieves the password hash for a given user.
+     * @param {number} userId - The ID of the user.
+     * @returns {Promise<Object>} - The user object with password_hash.
+     */
+    static async getUserPasswordHash(userId) {
+        const query = 'SELECT password_hash FROM USER WHERE id = ?';
+        const [rows] = await db.execute(query, [userId]);
+        return rows[0];
+    }
+
+    /**
+     * Updates the password hash for a user.
+     * @param {number} userId - The ID of the user.
+     * @param {string} newPasswordHash - The new hashed password.
+     * @returns {Promise<Object>} - The query result.
+     */
+    static async updatePassword(userId, newPasswordHash) {
+        const query = 'UPDATE USER SET password_hash = ? WHERE id = ?';
+        const [result] = await db.execute(query, [newPasswordHash, userId]);
+        return result;
+    }
+
+
+
+    /**
+     * Save verification code for a user
+     * Creates the table if it doesn't exist.
+     */
+    static async saveVerificationCode(userId, code, expiresAt) {
+        const connection = await db.getConnection();
+        try {
+            // Ensure table exists (temporary solution, ideally use migrations)
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS VERIFICATION_CODES (
+                    user_id INT PRIMARY KEY,
+                    code VARCHAR(10) NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES USER(id) ON DELETE CASCADE
+                )
+            `);
+
+            // Insert or Update
+            await connection.query(
+                `INSERT INTO VERIFICATION_CODES (user_id, code, expires_at)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE code = VALUES(code), expires_at = VALUES(expires_at)`,
+                [userId, code, expiresAt]
+            );
+        } finally {
+            connection.release();
+        }
+    }
+
+    /**
+     * Get verification code for a user
+     */
+    static async getVerificationCode(userId) {
+        // Build table just in case read happens before write (unlikely in this flow but safe)
+        // Actually, if table doesn't exist, this will error. 
+        // We assume saveVerificationCode is called first, or we catch the error.
+        try {
+            const [rows] = await db.query(
+                "SELECT * FROM VERIFICATION_CODES WHERE user_id = ?",
+                [userId]
+            );
+            return rows[0] || null;
+        } catch (err) {
+            // If table doesn't exist, return null
+            if (err.code === 'ER_NO_SUCH_TABLE') return null;
+            throw err;
+        }
+    }
+
+    /**
+     * Delete verification code after use
+     */
+    static async deleteVerificationCode(userId) {
+        try {
+            await db.query("DELETE FROM VERIFICATION_CODES WHERE user_id = ?", [userId]);
+        } catch (err) {
+            // Ignore if table missing
         }
     }
 }
