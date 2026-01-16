@@ -43,7 +43,10 @@ const app = express();
 // Middleware
 // ✅ Enable CORS for frontend
 app.use(cors({
-    origin: "http://localhost:5173", // your frontend URL
+    origin: ["http://localhost:5173", // For web
+            "http://192.168.1.107:8081",       // Mobile (Expo)
+             "http://192.168.1.107:19000",  // Expo dev
+            ],    
     credentials: true,
 }));
 
