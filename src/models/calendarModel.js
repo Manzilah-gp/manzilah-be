@@ -122,10 +122,32 @@ export const calendarModel = {
         GROUP BY c.id, cs.id
     `, [userId]);
 
+        // Get events where student is 'going'
+        const [events] = await db.query(`
+        SELECT 
+            e.id as event_id,
+            e.title,
+            e.description,
+            e.event_date,
+            e.event_time,
+            e.location,
+            e.event_type
+        FROM EVENT e
+        JOIN EVENT_RSVP r ON e.id = r.event_id
+        WHERE r.user_id = ? 
+            AND r.status = 'going'
+            AND e.status != 'cancelled'
+        ORDER BY e.event_date
+    `, [userId]);
+
         return {
             courses: courses.map(c => ({
                 ...c,
                 color: getCourseTypeColor(c.course_type)
+            })),
+            events: events.map(e => ({
+                ...e,
+                color: getEventTypeColor(e.event_type)
             }))
         };
     },
@@ -134,6 +156,7 @@ export const calendarModel = {
      * STUDENT - Get enrolled courses
      */
     async getStudentSchedule(userId) {
+        // Get courses
         const [courses] = await db.query(`
         SELECT 
             c.id as course_id,
@@ -159,16 +182,38 @@ export const calendarModel = {
             AND c.is_active = TRUE
     `, [userId]);
 
+        // Get events where student is 'going'
+        const [events] = await db.query(`
+        SELECT 
+            e.id as event_id,
+            e.title,
+            e.description,
+            e.event_date,
+            e.event_time,
+            e.location,
+            e.event_type
+        FROM EVENT e
+        JOIN EVENT_RSVP r ON e.id = r.event_id
+        WHERE r.user_id = ? 
+            AND r.status = 'going'
+            AND e.status != 'cancelled'
+        ORDER BY e.event_date
+    `, [userId]);
+
         return {
             courses: courses.map(c => ({
                 ...c,
                 color: getCourseTypeColor(c.course_type)
+            })),
+            events: events.map(e => ({
+                ...e,
+                color: getEventTypeColor(e.event_type)
             }))
         };
     },
 
     /**
-     * PARENT - Get children's courses with color per child
+     * PARENT - Get children's courses and events with color per child
      */
     async getParentSchedule(userId) {
         // Child colors (5 max)
@@ -193,7 +238,7 @@ export const calendarModel = {
     `, [userId]);
 
         if (children.length === 0) {
-            return { courses: [], children: [] };
+            return { courses: [], events: [], children: [] };
         }
 
         // Assign colors
@@ -207,6 +252,8 @@ export const calendarModel = {
 
         // Get all courses for all children
         const childIds = children.map(c => c.child_id);
+
+        // 1. Fetch Courses
         const [courses] = await db.query(`
         SELECT 
             c.id as course_id,
@@ -235,11 +282,35 @@ export const calendarModel = {
             AND c.is_active = TRUE
     `, [childIds]);
 
+        // 2. Fetch Events (where child is 'going')
+        const [events] = await db.query(`
+        SELECT 
+            e.id as event_id,
+            e.title,
+            e.description,
+            e.event_date,
+            e.event_time,
+            e.location,
+            e.event_type,
+            r.user_id as student_id
+        FROM EVENT e
+        JOIN EVENT_RSVP r ON e.id = r.event_id
+        WHERE r.user_id IN (?) 
+            AND r.status = 'going'
+            AND e.status != 'cancelled'
+        ORDER BY e.event_date
+    `, [childIds]);
+
         return {
             courses: courses.map(c => ({
                 ...c,
                 child_info: childColorMap[c.student_id],
                 color: childColorMap[c.student_id].color
+            })),
+            events: events.map(e => ({
+                ...e,
+                child_info: childColorMap[e.student_id],
+                color: childColorMap[e.student_id].color
             })),
             children: Object.entries(childColorMap).map(([id, info]) => ({
                 id: parseInt(id),
@@ -247,7 +318,5 @@ export const calendarModel = {
             }))
         };
     }
-
-
 
 }
