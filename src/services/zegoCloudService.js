@@ -36,7 +36,7 @@ export const ZegoCloudService = {
      * @param {number} expirationSeconds - Token validity (default 24h)
      */
     generateToken(userId, userName, roomId, expirationSeconds = 86400) {
-        const appId = parseInt(process.env.VITE_ZEGOCLOUD_APP_ID);
+        const appId = parseInt(process.env.ZEGOCLOUD_APP_ID);
         const serverSecret = process.env.ZEGOCLOUD_SERVER_SECRET;
 
         if (!appId || !serverSecret) {
@@ -162,8 +162,8 @@ function makeRandomString(length) {
     let result = '';
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const charactersLength = characters.length;
-    for ( let i = 0; i < length; i++ ) {
-       result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    for (let i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
     }
     return result;
 }

@@ -8,8 +8,10 @@ import {
     getMosqueDetails,
     getPublicCourses,
     getCourseDetails,
-    getFilterOptions
+    getFilterOptions,
+    getClosestMosques
 } from "../controllers/publicBrowsingController.js";
+import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
@@ -22,6 +24,13 @@ const router = express.Router();
  * GET /api/public/mosques?governorate=nablus&search=al-aqsa
  */
 router.get("/mosques", getPublicMosques);
+
+/**
+ * Get closest 3 mosques to user's location
+ * GET /api/public/mosques/closest
+ * Requires authentication
+ */
+router.get("/mosques/closest", verifyToken, getClosestMosques);
 
 /**
  * Get mosque details with courses

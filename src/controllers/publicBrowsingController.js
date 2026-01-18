@@ -165,3 +165,41 @@ export const getFilterOptions = async (req, res) => {
         });
     }
 };
+
+/**
+ * @desc    Get closest 3 mosques to user's location
+ * @route   GET /api/public/mosques/closest
+ * @access  Private (requires authentication)
+ */
+export const getClosestMosques = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const mosques = await PublicBrowsingModel.getClosestMosques(userId);
+
+        res.status(200).json({
+            success: true,
+            data: mosques,
+            count: mosques.length
+        });
+
+    } catch (error) {
+        console.error("Error fetching closest mosques:", error);
+
+        // Handle specific error for missing user location
+        if (error.message === 'User location not found') {
+            return res.status(404).json({
+                success: false,
+                message: "User location not found. Please add your location in your profile.",
+                error: error.message
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch closest mosques",
+            error: error.message
+        });
+    }
+};
+

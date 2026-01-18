@@ -14,7 +14,7 @@ const getCourseTypeColor = (courseType) => {
 const getEventTypeColor = (eventType) => {
     const colors = {
         'religious': '#e67e22',
-        'educational': '#3498db',
+        'educational': '#db34b7ff',
         'social': '#1abc9c',
         'fundraising': '#e74c3c'
     };

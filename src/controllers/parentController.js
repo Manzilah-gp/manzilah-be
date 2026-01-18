@@ -1,7 +1,7 @@
 //Parent-Child Relationship Management
 
 import db from "../config/db.js";
-import { notifyUser } from './firebaseNotificationController.js'; 
+import { notifyUser } from './firebaseNotificationController.js';
 
 /**
  * Send parent-child relationship request
@@ -18,7 +18,7 @@ import { notifyUser } from './firebaseNotificationController.js';
  */
 export const requestRelationship = async (req, res) => {
     try {
-                console.log('🟡 req.user:', req.user);
+        console.log('🟡 req.user:', req.user);
         console.log('🟡 role:', req.user?.role);
 
         const parentId = req.user.id;
@@ -42,7 +42,7 @@ export const requestRelationship = async (req, res) => {
         }
 
         // Check if requester is a parent
-if (!req.user.roles.includes('parent')) {
+        if (!req.user.roles.includes('parent')) {
             return res.status(403).json({
                 success: false,
                 message: 'Only parents can request relationships'
@@ -50,7 +50,7 @@ if (!req.user.roles.includes('parent')) {
         }
 
         // Find child by email
-     const [children] = await db.execute(`
+        const [children] = await db.execute(`
     SELECT 
         u.id,
         u.full_name,
@@ -123,15 +123,15 @@ if (!req.user.roles.includes('parent')) {
             WHERE id = ?
         `, [parentId]);
 
-if (result.insertId) {
-  await notifyUser(child.id, {
-    type: 'system',
-    title: 'Parent Relationship Request',
-    message: `${parentInfo[0].full_name} wants to connect as your ${relationshipType}`,
-    link: `/profile?tab=relationships`,
-    icon: '👨‍👩‍👧'
-  });
-}
+        if (result.insertId) {
+            await notifyUser(child.id, {
+                type: 'system',
+                title: 'Parent Relationship Request',
+                message: `${parentInfo[0].full_name} wants to connect as your ${relationshipType}`,
+                link: `/profile?tab=relationships`,
+                icon: '👨‍👩‍👧'
+            });
+        }
         res.status(201).json({
             success: true,
             message: 'Relationship request sent successfully! Child must accept.',
@@ -297,17 +297,17 @@ export const acceptRequest = async (req, res) => {
                 verified_at = NOW()
             WHERE id = ?
         `, [childId, requestId]);
-const [student] = await db.execute(`
+        const [student] = await db.execute(`
   SELECT full_name FROM user WHERE id = ?
 `, [childId]);
 
-await notifyUser(request.parent_id, {
-  type: 'system',
-  title: 'Relationship Accepted',
-  message: `${student[0].full_name} accepted your relationship request`,
-  link: `/my-children`,
-  icon: '✅'
-});
+        await notifyUser(request.parent_id, {
+            type: 'system',
+            title: 'Relationship Accepted',
+            message: `${student[0].full_name} accepted your relationship request`,
+            link: `/my-children`,
+            icon: '✅'
+        });
         res.status(200).json({
             success: true,
             message: `Relationship with ${request.parent_name} accepted successfully!`,
@@ -361,9 +361,9 @@ export const rejectRequest = async (req, res) => {
                 message: 'This request is not for you'
             });
         }
-// Before: await db.execute(`DELETE FROM parent_child_relationship...`);
+        // Before: await db.execute(`DELETE FROM parent_child_relationship...`);
 
-const [request] = await db.execute(`
+        const [request] = await db.execute(`
   SELECT parent_id, p.full_name as parent_name, u.full_name as child_name
   FROM parent_child_relationship pcr
   JOIN user p ON pcr.parent_id = p.id
@@ -371,13 +371,13 @@ const [request] = await db.execute(`
   WHERE pcr.id = ?
 `, [requestId]);
 
-await notifyUser(request[0].parent_id, {
-  type: 'system',
-  title: 'Relationship Request Declined',
-  message: `Your relationship request was not accepted`,
-  link: `/parent/my-requests`,
-  icon: '❌'
-});
+        await notifyUser(request[0].parent_id, {
+            type: 'system',
+            title: 'Relationship Request Declined',
+            message: `Your relationship request was not accepted`,
+            link: `/parent/my-requests`,
+            icon: '❌'
+        });
         // Delete the request
         await db.execute(`
             DELETE FROM parent_child_relationship
@@ -441,6 +441,132 @@ export const getMyChildren = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch children',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Get verified parents for student
+ * @route GET /api/parent/my-parents
+ * @access Private (Students)
+ * 
+ * PURPOSE: Show student all their verified parents/guardians
+ */
+export const getMyParents = async (req, res) => {
+    try {
+        const studentId = req.user.id;
+
+        const [parents] = await db.execute(`
+            SELECT 
+                pcr.id as relationship_id,
+                pcr.relationship_type,
+                pcr.verified_at,
+                u.id as parent_id,
+                u.full_name as parent_name,
+                u.email as parent_email,
+                u.phone as parent_phone
+            FROM parent_child_relationship pcr
+            JOIN user u ON pcr.parent_id = u.id
+            WHERE pcr.child_id = ?
+            AND pcr.is_verified = 1
+            ORDER BY pcr.verified_at DESC
+        `, [studentId]);
+
+        res.status(200).json({
+            success: true,
+            count: parents.length,
+            data: parents
+        });
+
+    } catch (error) {
+        console.error('❌ Error fetching parents:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch parents',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Delete/Cancel parent-child relationship
+ * @route DELETE /api/parent/delete-relationship/:relationshipId
+ * @access Private (Parents or Students)
+ * 
+ * PURPOSE: Allow both parents and students to delete relationships
+ * - Parents can cancel pending requests or remove verified children
+ * - Students can remove verified parent relationships
+ */
+export const deleteRelationship = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { relationshipId } = req.params;
+
+        // Get relationship details
+        const [relationships] = await db.execute(`
+            SELECT 
+                pcr.*,
+                p.full_name as parent_name,
+                c.full_name as child_name
+            FROM parent_child_relationship pcr
+            JOIN user p ON pcr.parent_id = p.id
+            JOIN user c ON pcr.child_id = c.id
+            WHERE pcr.id = ?
+        `, [relationshipId]);
+
+        if (relationships.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Relationship not found'
+            });
+        }
+
+        const relationship = relationships[0];
+
+        // Check if user is authorized (either parent or child in this relationship)
+        const isParent = relationship.parent_id === userId;
+        const isChild = relationship.child_id === userId;
+
+        if (!isParent && !isChild) {
+            return res.status(403).json({
+                success: false,
+                message: 'You are not authorized to delete this relationship'
+            });
+        }
+
+        // Delete the relationship
+        await db.execute(`
+            DELETE FROM parent_child_relationship
+            WHERE id = ?
+        `, [relationshipId]);
+
+        // Send notification to the other party
+        const notifyUserId = isParent ? relationship.child_id : relationship.parent_id;
+        const notifyMessage = isParent
+            ? `${relationship.parent_name} removed the parent-child relationship`
+            : `${relationship.child_name} removed the parent-child relationship`;
+
+        await notifyUser(notifyUserId, {
+            type: 'system',
+            title: 'Relationship Removed',
+            message: notifyMessage,
+            link: `/profile`,
+            icon: '🔗'
+        });
+
+        res.status(200).json({
+            success: true,
+            message: relationship.is_verified
+                ? 'Relationship removed successfully'
+                : 'Request cancelled successfully'
+        });
+
+    } catch (error) {
+        console.error('❌ Error deleting relationship:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete relationship',
             error: error.message
         });
     }

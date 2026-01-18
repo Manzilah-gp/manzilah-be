@@ -23,9 +23,9 @@ export const createNotification = async (userId, notificationData) => {
     };
 
     const docRef = await db.collection('notifications').add(notification);
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       id: docRef.id,
       notification: { ...notification, id: docRef.id }
     };
@@ -42,20 +42,20 @@ export const sendPushNotification = async (userId, notificationData) => {
   try {
     // Convert userId to string to ensure valid document path
     const userIdString = userId.toString();
-    
+
     console.log('📱 Attempting to send push notification to user:', userIdString);
-    
+
     // Get user's FCM token from Firestore
     const userDocRef = db.collection('users').doc(userIdString);
     const userDoc = await userDocRef.get();
-    
+
     if (!userDoc.exists) {
       console.log('⚠️ User document not found:', userIdString);
       return { success: false, message: 'User document not found' };
     }
-    
+
     const userData = userDoc.data();
-    
+
     if (!userData || !userData.fcmToken) {
       console.log('⚠️ No FCM token found for user:', userIdString);
       return { success: false, message: 'No FCM token' };
@@ -80,7 +80,7 @@ export const sendPushNotification = async (userId, notificationData) => {
 
     const response = await messaging.send(message);
     console.log('✅ Push notification sent successfully:', response);
-    
+
     return { success: true, messageId: response };
   } catch (error) {
     console.error('❌ Send push notification error:', error);
@@ -100,11 +100,11 @@ export const notifyUser = async (userId, notificationData) => {
     }
 
     console.log('🔔 Sending notification to user:', userId);
-    
+
     // Create in-app notification in Firestore
     const firestoreResult = await createNotification(userId, notificationData);
     console.log('📊 Firestore notification result:', firestoreResult);
-    
+
     // Send push notification (don't fail if this doesn't work)
     let pushResult = { success: false, message: 'Push not attempted' };
     try {
@@ -113,7 +113,7 @@ export const notifyUser = async (userId, notificationData) => {
     } catch (pushError) {
       console.error('⚠️ Push notification failed, but continuing:', pushError.message);
     }
-    
+
     return {
       success: true,
       firestore: firestoreResult,
@@ -134,9 +134,9 @@ export const saveFCMToken = async (req, res) => {
     const userId = req.user.id;
 
     if (!fcmToken) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'FCM token is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'FCM token is required'
       });
     }
 

@@ -370,6 +370,84 @@ export const PublicBrowsingModel = {
             scheduleTypes: ['all', 'onsite', 'online', 'hybrid'],
             priceFilters: ['all', 'free', 'paid']
         };
+    },
+
+    /**
+     * Get the closest 3 mosques to a user based on their stored location
+     * Uses Haversine formula to calculate distance
+     */
+    async getClosestMosques(userId) {
+        // First, get the user's location
+        const [userLocations] = await db.execute(`
+            SELECT latitude, longitude, governorate
+            FROM USER_LOCATION
+            WHERE user_id = ?
+            AND latitude IS NOT NULL
+            AND longitude IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+        `, [userId]);
+
+        if (userLocations.length === 0) {
+            throw new Error('User location not found');
+        }
+
+        const userLat = userLocations[0].latitude;
+        const userLon = userLocations[0].longitude;
+        const userGovernorate = userLocations[0].governorate;
+
+        console.log(userGovernorate);
+
+        // Get all mosques with their locations and calculate distance
+        // Using Haversine formula: 
+        // distance = 2 * R * asin(sqrt(sin²((lat2-lat1)/2) + cos(lat1)*cos(lat2)*sin²((lon2-lon1)/2)))
+        // R = Earth's radius in km (6371)
+        const [mosques] = await db.execute(`
+            SELECT 
+                m.id,
+                m.name,
+                m.contact_number,
+                ml.governorate,
+                ml.region,
+                ml.address,
+                ml.latitude,
+                ml.longitude,
+                -- Count active courses
+                (SELECT COUNT(*) 
+                 FROM COURSE c 
+                 WHERE c.mosque_id = m.id 
+                   AND c.is_active = TRUE
+                   AND (c.enrollment_deadline IS NULL OR c.enrollment_deadline >= CURDATE())
+                ) as active_courses_count,
+                -- Count enrolled students
+                (SELECT COUNT(DISTINCT e.student_id)
+                 FROM COURSE c
+                 JOIN ENROLLMENT e ON c.id = e.course_id
+                 WHERE c.mosque_id = m.id 
+                   AND e.status = 'active'
+                ) as total_students_count,
+                -- Calculate distance in kilometers using Haversine formula
+                (
+                    6371 * 2 * ASIN(
+                        SQRT(
+                            POWER(SIN((RADIANS(ml.latitude) - RADIANS(?)) / 2), 2) +
+                            COS(RADIANS(?)) * COS(RADIANS(ml.latitude)) *
+                            POWER(SIN((RADIANS(ml.longitude) - RADIANS(?)) / 2), 2)
+                        )
+                    )
+                ) as distance_km
+            FROM MOSQUE m
+            INNER JOIN MOSQUE_LOCATION ml ON m.id = ml.mosque_id
+            WHERE ml.latitude IS NOT NULL 
+              AND ml.longitude IS NOT NULL
+              -- AND ml.governorate = ?
+            HAVING distance_km IS NOT NULL
+            ORDER BY distance_km ASC
+            LIMIT 3
+        `, [userLat, userLat, userLon]);
+
+        console.log('public browsing model closest mosques', mosques);
+        return mosques;
     }
 };
 
