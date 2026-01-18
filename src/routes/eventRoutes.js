@@ -19,9 +19,10 @@ import {
     getUserCalendarEvents,
     getMyMosqueEvents,
     markEventCompleted,
-      getEventsFromEnrolledMosques,
-    getEnrolledMosquesEventCount 
-
+    getEventsFromEnrolledMosques,
+    getEnrolledMosquesEventCount,
+    getEventsFromTeachingMosque,
+    getTeachingMosqueEventCount
 } from "../controllers/eventController.js";
 
 const router = express.Router();
@@ -30,12 +31,22 @@ const router = express.Router();
 
 // Get all events
 router.get("/", verifyToken, getEvents);
-// Mark event as completed
-router.put('/:id/complete', verifyToken, markEventCompleted);
+
 // ==================== SPECIFIC ROUTES (BEFORE /:id) ====================
 
 // CRITICAL: This route MUST be BEFORE /:id route to prevent 'user' being treated as an ID
 router.get('/user/calendar', verifyToken, getUserCalendarEvents);
+
+// ⭐ TEACHING MOSQUE ROUTES (MUST BE BEFORE /:id) ⭐
+router.get('/my-teaching-mosque/count', verifyToken, getTeachingMosqueEventCount);
+router.get('/my-teaching-mosque', verifyToken, getEventsFromTeachingMosque);
+
+// ⭐ ENROLLED MOSQUES ROUTES (MUST BE BEFORE /:id) ⭐
+router.get('/my-enrolled-mosques/count', verifyToken, getEnrolledMosquesEventCount);
+router.get('/my-enrolled-mosques', verifyToken, getEventsFromEnrolledMosques);
+
+// ⭐ MY MOSQUE EVENTS (MUST BE BEFORE /:id) ⭐
+router.get('/my-mosque-events', verifyToken, getMyMosqueEvents);
 
 // Event interactions (mosque admin only)
 router.get("/:id/interactions", verifyToken, checkRole(["mosque_admin"]), getEventInteractions);
@@ -65,6 +76,9 @@ router.put("/:id", verifyToken, checkRole(["mosque_admin"]), updateEvent);
 // Delete event (mosque admin only)
 router.delete("/:id", verifyToken, checkRole(["mosque_admin"]), deleteEvent);
 
+// Mark event as completed
+router.put('/:id/complete', verifyToken, markEventCompleted);
+
 // ==================== MINISTRY ADMIN ROUTES ====================
 
 // Approve/Reject events (ministry admin only)
@@ -73,12 +87,7 @@ router.put("/:id/reject", verifyToken, checkRole(["ministry_admin"]), rejectEven
 
 // ==================== GET BY ID MUST BE ABSOLUTE LAST ====================
 
-//mange fundraising evemts
-router.get('/my-mosque-events', verifyToken, getMyMosqueEvents);
-
-// Routes to get the  event from the enrolled mousqes 
-router.get('/my-enrolled-mosques',verifyToken ,getEventsFromEnrolledMosques);
-router.get('/my-enrolled-mosques/count',verifyToken, getEnrolledMosquesEventCount);
+// ⭐ THIS MUST BE THE LAST GET ROUTE ⭐
 router.get("/:id", verifyToken, getEventById);
 
 export default router;
