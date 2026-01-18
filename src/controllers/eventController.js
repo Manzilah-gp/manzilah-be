@@ -1240,11 +1240,20 @@ export const markEventCompleted = async (req, res) => {
  * - Removed donation_campaign table references
  * - Gets region/governorate from mosque_location table instead of mosque
  */
+/**
+ * Get events from mosques where user is enrolled in courses
+ * WITH FULL INTERACTION DATA (likes, RSVPs, comments)
+ * 
+ * Replace this function in your eventController.js
+ */
 export const getEventsFromEnrolledMosques = async (req, res) => {
     try {
         const userId = req.user.id;
         
-        // SQL query to get events from mosques where user has course enrollments
+        console.log('=== GET ENROLLED MOSQUE EVENTS ===');
+        console.log('User ID:', userId);
+        
+        // ✅ FIXED: Now includes ALL interaction data like getEvents()
         const [events] = await db.execute(`
             SELECT DISTINCT
                 e.*,
@@ -1253,7 +1262,16 @@ export const getEventsFromEnrolledMosques = async (req, res) => {
                 ml.region,
                 ml.governorate,
                 ml.address as mosque_address,
-                u.full_name as created_by_name
+                u.full_name as creator_name,
+                -- ✅ ADD INTERACTION COUNTS
+                (SELECT COUNT(*) FROM event_like WHERE event_id = e.id) as likes_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'going') as going_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'not_going') as not_going_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'maybe') as maybe_count,
+                (SELECT COUNT(*) FROM event_comment WHERE event_id = e.id) as comments_count,
+                -- ✅ ADD USER-SPECIFIC INTERACTION STATUS
+                EXISTS(SELECT 1 FROM event_like WHERE event_id = e.id AND user_id = ?) as user_liked,
+                (SELECT status FROM event_rsvp WHERE event_id = e.id AND user_id = ?) as user_rsvp
             FROM event e
             JOIN mosque m ON e.mosque_id = m.id
             LEFT JOIN mosque_location ml ON m.id = ml.mosque_id
@@ -1269,12 +1287,24 @@ export const getEventsFromEnrolledMosques = async (req, res) => {
             AND e.approval_status = 'approved'
             AND e.status != 'cancelled'
             ORDER BY e.event_date DESC, e.event_time DESC
-        `, [userId]);
+        `, [userId, userId, userId]); // ✅ Three userId params for the subqueries
+
+        console.log('✅ Events found:', events.length);
+        if (events.length > 0) {
+            console.log('Sample event with interactions:', {
+                id: events[0].id,
+                title: events[0].title,
+                likes_count: events[0].likes_count,
+                going_count: events[0].going_count,
+                user_liked: events[0].user_liked,
+                user_rsvp: events[0].user_rsvp
+            });
+        }
 
         res.status(200).json({
             success: true,
             count: events.length,
-            data: events
+            data: events // Keep as 'data' to match your existing code
         });
 
     } catch (error) {
@@ -1316,6 +1346,196 @@ export const getEnrolledMosquesEventCount = async (req, res) => {
         res.status(200).json({
             success: true,
             count: result[0].event_count
+        });
+
+    } catch (error) {
+        console.error('❌ Error fetching event count:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch event count',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Get events from mosque where teacher is teaching
+ * @route GET /api/events/my-teaching-mosque
+ * @access Private (Teachers)
+ * 
+ * PURPOSE: Teachers can see events from the mosque where they teach courses
+ * LOGIC: 
+ * 1. Find all courses where the teacher_id matches the user's ID
+ * 2. Get mosque_id from those courses
+ * 3. Get events from that mosque
+ * 4. Return events with full interaction data
+ */
+export const getEventsFromTeachingMosque = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        console.log('=== GET TEACHING MOSQUE EVENTS ===');
+        console.log('Teacher User ID:', userId);
+        
+        // First, check if teacher has any courses assigned
+        const [teacherCourses] = await db.execute(`
+            SELECT id, name, mosque_id 
+            FROM course 
+            WHERE teacher_id = ?
+        `, [userId]);
+        
+        console.log('Teacher courses found:', teacherCourses.length);
+        if (teacherCourses.length > 0) {
+            console.log('Teacher courses:', teacherCourses);
+        }
+        
+        // If no courses found, return empty result with helpful message
+        if (teacherCourses.length === 0) {
+            console.log('⚠️ No courses found for this teacher');
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                data: [],
+                message: 'No courses assigned to this teacher yet'
+            });
+        }
+        
+        // Get unique mosque IDs
+        const mosqueIds = [...new Set(teacherCourses.map(c => c.mosque_id).filter(id => id !== null))];
+        
+        if (mosqueIds.length === 0) {
+            console.log('⚠️ Teacher courses have no mosque assigned');
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                data: [],
+                message: 'Teacher courses are not assigned to any mosque yet'
+            });
+        }
+        
+        console.log('Mosque IDs where teacher teaches:', mosqueIds);
+        
+        // Get events from mosques where teacher teaches
+        const [events] = await db.execute(`
+            SELECT DISTINCT
+                e.*,
+                m.name as mosque_name,
+                m.contact_number as mosque_contact,
+                ml.region,
+                ml.governorate,
+                ml.address as mosque_address,
+                u.full_name as creator_name,
+                -- Interaction counts
+                (SELECT COUNT(*) FROM event_like WHERE event_id = e.id) as likes_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'going') as going_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'not_going') as not_going_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'maybe') as maybe_count,
+                (SELECT COUNT(*) FROM event_comment WHERE event_id = e.id) as comments_count,
+                -- User-specific interaction status
+                EXISTS(SELECT 1 FROM event_like WHERE event_id = e.id AND user_id = ?) as user_liked,
+                (SELECT status FROM event_rsvp WHERE event_id = e.id AND user_id = ?) as user_rsvp
+            FROM event e
+            JOIN mosque m ON e.mosque_id = m.id
+            LEFT JOIN mosque_location ml ON m.id = ml.mosque_id
+            LEFT JOIN user u ON e.created_by = u.id
+            WHERE e.mosque_id IN (
+                SELECT DISTINCT mosque_id
+                FROM course
+                WHERE teacher_id = ?
+                AND mosque_id IS NOT NULL
+            )
+            AND e.approval_status = 'approved'
+            AND e.status != 'cancelled'
+            ORDER BY e.event_date DESC, e.event_time DESC
+        `, [userId, userId, userId]);
+
+        console.log('✅ Events found:', events.length);
+        if (events.length > 0) {
+            console.log('Sample event:', {
+                id: events[0].id,
+                title: events[0].title,
+                mosque_name: events[0].mosque_name,
+                event_date: events[0].event_date
+            });
+        } else {
+            console.log('⚠️ No approved events found for the teaching mosque(s)');
+        }
+
+        res.status(200).json({
+            success: true,
+            count: events.length,
+            data: events,
+            teaching_info: {
+                courses_count: teacherCourses.length,
+                mosques: mosqueIds
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error fetching teaching mosque events:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch events from teaching mosque',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Get count of events from teaching mosque
+ * @route GET /api/events/my-teaching-mosque/count
+ * @access Private (Teachers)
+ */
+export const getTeachingMosqueEventCount = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        console.log('=== GET TEACHING MOSQUE EVENT COUNT ===');
+        console.log('Teacher User ID:', userId);
+        
+        // First check if teacher has courses
+        const [teacherCourses] = await db.execute(`
+            SELECT COUNT(*) as course_count,
+                   COUNT(DISTINCT mosque_id) as mosque_count
+            FROM course
+            WHERE teacher_id = ?
+            AND mosque_id IS NOT NULL
+        `, [userId]);
+        
+        console.log('Teacher has:', teacherCourses[0]);
+        
+        // If no courses, return 0
+        if (teacherCourses[0].course_count === 0) {
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                message: 'No courses assigned to this teacher'
+            });
+        }
+        
+        // Get event count
+        const [result] = await db.execute(`
+            SELECT COUNT(DISTINCT e.id) as event_count
+            FROM event e
+            WHERE e.mosque_id IN (
+                SELECT DISTINCT mosque_id
+                FROM course
+                WHERE teacher_id = ?
+                AND mosque_id IS NOT NULL
+            )
+            AND e.approval_status = 'approved'
+            AND e.status != 'cancelled'
+        `, [userId]);
+
+        console.log('✅ Event count:', result[0].event_count);
+
+        res.status(200).json({
+            success: true,
+            count: result[0].event_count,
+            teaching_info: {
+                courses_count: teacherCourses[0].course_count,
+                mosques_count: teacherCourses[0].mosque_count
+            }
         });
 
     } catch (error) {

@@ -29,7 +29,7 @@ import parentRoutes from './routes/parentRoutes.js';
 import firebaseNotificationRoutes from './routes/firebaseNotificationRoutes.js';
 import parentProgressRoutes from './routes/parentProgressRoutes.js';
 import studentProgressRoutes from './routes/studentProgressRoutes.js';
-
+import islamicServiceRoutes from "./routes/islamicServiceRoutes.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,7 +43,10 @@ const app = express();
 // Middleware
 // ✅ Enable CORS for frontend
 app.use(cors({
-    origin: "http://localhost:5173", // your frontend URL
+    origin: ["http://localhost:5173", // For web
+            "http://192.168.1.107:8081",       // Mobile (Expo)
+             "http://192.168.1.107:19000",  // Expo dev
+            ],    
     credentials: true,
 }));
 
@@ -81,7 +84,7 @@ app.use("/api/materials", materialRoutes);
 app.use('/api/parent-progress', parentProgressRoutes);
 app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads/materials')));
 app.use('/api/student-progress', studentProgressRoutes);
-
+app.use("/api/islamic", islamicServiceRoutes);
 
 
 // Default route
