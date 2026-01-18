@@ -1240,11 +1240,20 @@ export const markEventCompleted = async (req, res) => {
  * - Removed donation_campaign table references
  * - Gets region/governorate from mosque_location table instead of mosque
  */
+/**
+ * Get events from mosques where user is enrolled in courses
+ * WITH FULL INTERACTION DATA (likes, RSVPs, comments)
+ * 
+ * Replace this function in your eventController.js
+ */
 export const getEventsFromEnrolledMosques = async (req, res) => {
     try {
         const userId = req.user.id;
         
-        // SQL query to get events from mosques where user has course enrollments
+        console.log('=== GET ENROLLED MOSQUE EVENTS ===');
+        console.log('User ID:', userId);
+        
+        // ✅ FIXED: Now includes ALL interaction data like getEvents()
         const [events] = await db.execute(`
             SELECT DISTINCT
                 e.*,
@@ -1253,7 +1262,16 @@ export const getEventsFromEnrolledMosques = async (req, res) => {
                 ml.region,
                 ml.governorate,
                 ml.address as mosque_address,
-                u.full_name as created_by_name
+                u.full_name as creator_name,
+                -- ✅ ADD INTERACTION COUNTS
+                (SELECT COUNT(*) FROM event_like WHERE event_id = e.id) as likes_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'going') as going_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'not_going') as not_going_count,
+                (SELECT COUNT(*) FROM event_rsvp WHERE event_id = e.id AND status = 'maybe') as maybe_count,
+                (SELECT COUNT(*) FROM event_comment WHERE event_id = e.id) as comments_count,
+                -- ✅ ADD USER-SPECIFIC INTERACTION STATUS
+                EXISTS(SELECT 1 FROM event_like WHERE event_id = e.id AND user_id = ?) as user_liked,
+                (SELECT status FROM event_rsvp WHERE event_id = e.id AND user_id = ?) as user_rsvp
             FROM event e
             JOIN mosque m ON e.mosque_id = m.id
             LEFT JOIN mosque_location ml ON m.id = ml.mosque_id
@@ -1269,12 +1287,24 @@ export const getEventsFromEnrolledMosques = async (req, res) => {
             AND e.approval_status = 'approved'
             AND e.status != 'cancelled'
             ORDER BY e.event_date DESC, e.event_time DESC
-        `, [userId]);
+        `, [userId, userId, userId]); // ✅ Three userId params for the subqueries
+
+        console.log('✅ Events found:', events.length);
+        if (events.length > 0) {
+            console.log('Sample event with interactions:', {
+                id: events[0].id,
+                title: events[0].title,
+                likes_count: events[0].likes_count,
+                going_count: events[0].going_count,
+                user_liked: events[0].user_liked,
+                user_rsvp: events[0].user_rsvp
+            });
+        }
 
         res.status(200).json({
             success: true,
             count: events.length,
-            data: events
+            data: events // Keep as 'data' to match your existing code
         });
 
     } catch (error) {
