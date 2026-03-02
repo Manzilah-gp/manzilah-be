@@ -423,7 +423,7 @@ export const getMyChildren = async (req, res) => {
                 COUNT(e.id) as total_enrollments
             FROM parent_child_relationship pcr
             JOIN user u ON pcr.child_id = u.id
-            LEFT JOIN enrollment e ON u.id = e.student_id AND e.status = 'active'
+            LEFT JOIN enrollment e ON u.id = e.student_id AND (e.status = 'active' OR e.status = 'completed')
             WHERE pcr.parent_id = ?
             AND pcr.is_verified = 1
             GROUP BY pcr.id, u.id

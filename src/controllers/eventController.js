@@ -1,6 +1,6 @@
 // backend/src/controllers/eventController.js
 import db from "../config/db.js";
-import { notifyUser } from './firebaseNotificationController.js'; 
+import { notifyUser } from './firebaseNotificationController.js';
 
 /**
  * Create a new event
@@ -8,85 +8,85 @@ import { notifyUser } from './firebaseNotificationController.js';
  * Fundraising events need ministry approval
  */
 export const createEvent = async (req, res) => {
-  try {
-    const user_id = req.user.id;
-    
-    console.log('📥 Raw request body:', req.body);
-    
-    // ✅ FLEXIBLE: Accept either naming convention from frontend
-    const {
-      title,
-      description,
-      event_date,
-      event_time,
-      location,
-      event_type,
-      show_donors,
-      allow_anonymous
-    } = req.body;
-    
-    // ✅ Handle both possible field names from frontend
-    const fundraising_goal = req.body.fundraising_goal || req.body.fundraising_goal_cents;
-    const min_donation = req.body.min_donation || req.body.min_donation_cents;
+    try {
+        const user_id = req.user.id;
 
-    console.log('📥 Parsed values (in dollars):', { fundraising_goal, min_donation });
+        console.log('📥 Raw request body:', req.body);
 
-    // Validate required fields
-    if (!title || !description || !event_date || !event_type) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
-    }
+        // ✅ FLEXIBLE: Accept either naming convention from frontend
+        const {
+            title,
+            description,
+            event_date,
+            event_time,
+            location,
+            event_type,
+            show_donors,
+            allow_anonymous
+        } = req.body;
 
-    // ✅ VALIDATE FUNDRAISING - Check DOLLARS (not cents)
-    if (event_type === 'fundraising') {
-      if (!fundraising_goal || fundraising_goal < 1) {
-        return res.status(400).json({
-          success: false,
-          message: 'Fundraising goal must be at least $1.00'
-        });
-      }
-      
-      if (min_donation && min_donation < 1) {
-        return res.status(400).json({
-          success: false,
-          message: 'Minimum donation must be at least $1.00'
-        });
-      }
+        // ✅ Handle both possible field names from frontend
+        const fundraising_goal = req.body.fundraising_goal || req.body.fundraising_goal_cents;
+        const min_donation = req.body.min_donation || req.body.min_donation_cents;
 
-      console.log('✅ Validation passed (dollars):', { fundraising_goal, min_donation });
-    }
+        console.log('📥 Parsed values (in dollars):', { fundraising_goal, min_donation });
 
-    // Get mosque_id
-    const [mosques] = await db.execute(
-      'SELECT id FROM mosque WHERE mosque_admin_id = ?',
-      [user_id]
-    );
+        // Validate required fields
+        if (!title || !description || !event_date || !event_type) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields'
+            });
+        }
 
-    if (mosques.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: 'You must be a mosque admin to create events'
-      });
-    }
+        // ✅ VALIDATE FUNDRAISING - Check DOLLARS (not cents)
+        if (event_type === 'fundraising') {
+            if (!fundraising_goal || fundraising_goal < 1) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Fundraising goal must be at least $1.00'
+                });
+            }
 
-    const mosque_id = mosques[0].id;
+            if (min_donation && min_donation < 1) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Minimum donation must be at least $1.00'
+                });
+            }
 
-    let query;
-    let params;
+            console.log('✅ Validation passed (dollars):', { fundraising_goal, min_donation });
+        }
 
-    if (event_type === 'fundraising') {
-      // ✅ NOW CONVERT TO CENTS (Backend conversion)
-      const fundraising_goal_cents = Math.round(fundraising_goal * 100);
-      const min_donation_cents = Math.round((min_donation || 10) * 100);
+        // Get mosque_id
+        const [mosques] = await db.execute(
+            'SELECT id FROM mosque WHERE mosque_admin_id = ?',
+            [user_id]
+        );
 
-      console.log('💰 Converted to cents:', { 
-        fundraising_goal_cents, 
-        min_donation_cents 
-      });
+        if (mosques.length === 0) {
+            return res.status(403).json({
+                success: false,
+                message: 'You must be a mosque admin to create events'
+            });
+        }
 
-      query = `
+        const mosque_id = mosques[0].id;
+
+        let query;
+        let params;
+
+        if (event_type === 'fundraising') {
+            // ✅ NOW CONVERT TO CENTS (Backend conversion)
+            const fundraising_goal_cents = Math.round(fundraising_goal * 100);
+            const min_donation_cents = Math.round((min_donation || 10) * 100);
+
+            console.log('💰 Converted to cents:', {
+                fundraising_goal_cents,
+                min_donation_cents
+            });
+
+            query = `
         INSERT INTO event (
           mosque_id, created_by, title, description, event_date, event_time,
           location, event_type,
@@ -96,85 +96,85 @@ export const createEvent = async (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'scheduled', 'pending')
       `;
 
-      params = [
-        mosque_id,
-        user_id,
-        title,
-        description,
-        event_date,
-        event_time || null,
-        location || null,
-        event_type,
-        fundraising_goal_cents,      // ✅ Saved as cents
-        min_donation_cents,           // ✅ Saved as cents
-        show_donors !== false ? 1 : 0,
-        allow_anonymous !== false ? 1 : 0
-      ];
-    } else {
-      query = `
+            params = [
+                mosque_id,
+                user_id,
+                title,
+                description,
+                event_date,
+                event_time || null,
+                location || null,
+                event_type,
+                fundraising_goal_cents,      // ✅ Saved as cents
+                min_donation_cents,           // ✅ Saved as cents
+                show_donors !== false ? 1 : 0,
+                allow_anonymous !== false ? 1 : 0
+            ];
+        } else {
+            query = `
         INSERT INTO event (
           mosque_id, created_by, title, description, event_date, event_time,
           location, event_type, status, approval_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 'approved')
       `;
 
-      params = [
-        mosque_id,
-        user_id,
-        title,
-        description,
-        event_date,
-        event_time || null,
-        location || null,
-        event_type
-      ];
-    }
+            params = [
+                mosque_id,
+                user_id,
+                title,
+                description,
+                event_date,
+                event_time || null,
+                location || null,
+                event_type
+            ];
+        }
 
-    console.log('🔍 Executing query...');
-    const [result] = await db.execute(query, params);
+        console.log('🔍 Executing query...');
+        const [result] = await db.execute(query, params);
 
-    console.log('✅ Event created with ID:', result.insertId);
+        console.log('✅ Event created with ID:', result.insertId);
 
-    const [events] = await db.execute(
-      'SELECT * FROM event WHERE id = ?',
-      [result.insertId]
-    );
-// After event is created
+        const [events] = await db.execute(
+            'SELECT * FROM event WHERE id = ?',
+            [result.insertId]
+        );
+        // After event is created
 
-// Get all active students at this mosque
-const [students] = await db.execute(`
+        // Get all active students at this mosque
+        const [students] = await db.execute(`
   SELECT DISTINCT e.student_id, u.full_name
   FROM enrollment e
   JOIN course c ON e.course_id = c.id
   JOIN user u ON e.student_id = u.id
   WHERE c.mosque_id = ?
-    AND e.status = 'active'
+    AND (e.status = 'active' OR e.status = 'completed')
 `, [mosque_id]);
 
-for (const student of students) {
-  await notifyUser(student.student_id, {
-    type: 'system',
-    title: 'New Event',
-    message: `${title } - ${event_date}`,
-    link: `/events/${result.insertId}`,
-    icon: '📅'
-  });
-}
-    res.json({
-      success: true,
-      message: 'Event created successfully',
-      event: events[0],
-      approval_status: events[0].approval_status
-    });
+        for (const student of students) {
+            await notifyUser(student.student_id, {
+                type: 'system',
+                title: 'New Event',
+                message: `${title} - ${event_date}`,
+                link: `/events/${result.insertId}`,
+                icon: '📅'
+            });
+        }
+        res.json({
+            success: true,
+            message: 'Event created successfully',
+            event: events[0],
+            approval_status: events[0].approval_status
+        });
 
-  } catch (error) {
-    console.error('❌ Error creating event:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create event',
-      error: error.message
-    });
-  }
+    } catch (error) {
+        console.error('❌ Error creating event:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create event',
+            error: error.message
+        });
+    }
 };
 
 /**
@@ -219,25 +219,25 @@ export const getEvents = async (req, res) => {
         const params = [userId, userId];
 
         // Check if user is mosque admin
-const [mosqueAdminRole] = await db.query(
-    "SELECT mosque_id FROM ROLE_ASSIGNMENT WHERE user_id = ? AND role_id = (SELECT id FROM ROLE WHERE name = 'mosque_admin') AND is_active = TRUE",
-    [userId]
-);
-const isMosqueAdmin = mosqueAdminRole && mosqueAdminRole.length > 0;
+        const [mosqueAdminRole] = await db.query(
+            "SELECT mosque_id FROM ROLE_ASSIGNMENT WHERE user_id = ? AND role_id = (SELECT id FROM ROLE WHERE name = 'mosque_admin') AND is_active = TRUE",
+            [userId]
+        );
+        const isMosqueAdmin = mosqueAdminRole && mosqueAdminRole.length > 0;
 
-// Ministry admin sees ALL events
-// Mosque admin sees approved events + their own mosque's rejected events
-// Regular users see only approved events
-if (!isMinistryAdmin) {
-    if (isMosqueAdmin) {
-        // Mosque admin sees approved + their mosque's rejected events
-        query += " AND (e.approval_status = 'approved' OR (e.approval_status = 'rejected' AND e.mosque_id = ?))";
-        params.push(mosqueAdminRole[0].mosque_id);
-    } else {
-        // Regular users see only approved
-        query += " AND e.approval_status = 'approved'";
-    }
-}
+        // Ministry admin sees ALL events
+        // Mosque admin sees approved events + their own mosque's rejected events
+        // Regular users see only approved events
+        if (!isMinistryAdmin) {
+            if (isMosqueAdmin) {
+                // Mosque admin sees approved + their mosque's rejected events
+                query += " AND (e.approval_status = 'approved' OR (e.approval_status = 'rejected' AND e.mosque_id = ?))";
+                params.push(mosqueAdminRole[0].mosque_id);
+            } else {
+                // Regular users see only approved
+                query += " AND e.approval_status = 'approved'";
+            }
+        }
 
         // Apply my_mosque filter
         if (filter === 'my_mosque') {
@@ -245,7 +245,7 @@ if (!isMinistryAdmin) {
                 "SELECT mosque_id FROM ROLE_ASSIGNMENT WHERE user_id = ? AND role_id = (SELECT id FROM ROLE WHERE name = 'mosque_admin') AND is_active = TRUE",
                 [userId]
             );
-            
+
             if (adminMosque && adminMosque.length > 0) {
                 query += " AND e.mosque_id = ?";
                 params.push(adminMosque[0].mosque_id);
@@ -275,7 +275,7 @@ if (!isMinistryAdmin) {
         console.log('Query params:', { mosque_id, event_type, status, filter });
 
         const [events] = await db.query(query, params);
- 
+
         console.log('Events found:', events.length);
         if (event_type === 'fundraising') {
             console.log('Fundraising events:', events.map(e => ({
@@ -467,7 +467,7 @@ export const updateEvent = async (req, res) => {
         if (updates.approval_status) {
             fields.push('approval_status = ?');
             values.push(updates.approval_status);
-            
+
             // Clear rejection reason when resubmitting
             if (updates.approval_status === 'pending') {
                 fields.push('rejection_reason = NULL');
@@ -570,35 +570,35 @@ export const deleteEvent = async (req, res) => {
 export const approveEvent = async (req, res) => {
     try {
         const eventId = req.params.id;
-        
+
         console.log('=== APPROVE EVENT ===');
         console.log('Event ID:', eventId);
-        
+
         // Check BEFORE
         const [before] = await db.query(
             'SELECT id, title, approval_status FROM EVENT WHERE id = ?',
             [eventId]
         );
         console.log('BEFORE:', before[0]);
-        
+
         // Simple UPDATE - only approval_status
         const [result] = await db.query(
             'UPDATE EVENT SET approval_status = ? WHERE id = ?',
             ['approved', eventId]
         );
-        
+
         console.log('UPDATE RESULT:', {
             affectedRows: result.affectedRows,
             changedRows: result.changedRows
         });
-        
+
         // Check AFTER
         const [after] = await db.query(
             'SELECT id, title, approval_status FROM EVENT WHERE id = ?',
             [eventId]
         );
         console.log('AFTER:', after[0]);
-        
+
         if (after[0].approval_status === 'approved') {
             console.log(' SUCCESS: Event approved!');
             res.json({
@@ -612,7 +612,7 @@ export const approveEvent = async (req, res) => {
                 message: 'Failed to approve event'
             });
         }
-        
+
     } catch (error) {
         console.error('ERROR approving event:', error);
         res.status(500).json({
@@ -631,18 +631,18 @@ export const rejectEvent = async (req, res) => {
     try {
         const eventId = req.params.id;
         const { reason } = req.body;
-        
+
         console.log('=== REJECT EVENT ===');
         console.log('Event ID:', eventId);
         console.log('Reason:', reason);
-        
+
         // Check BEFORE
         const [before] = await db.query(
             'SELECT id, approval_status, rejection_reason FROM EVENT WHERE id = ?',
             [eventId]
         );
         console.log('BEFORE:', before[0]);
-        
+
         // UPDATE only columns that exist
         const [result] = await db.query(`
             UPDATE EVENT 
@@ -650,19 +650,19 @@ export const rejectEvent = async (req, res) => {
                 rejection_reason = ?
             WHERE id = ?
         `, ['rejected', reason, eventId]);
-        
+
         console.log('UPDATE RESULT:', {
             affectedRows: result.affectedRows,
             changedRows: result.changedRows
         });
-        
+
         // Check AFTER
         const [after] = await db.query(
             'SELECT id, approval_status, rejection_reason FROM EVENT WHERE id = ?',
             [eventId]
         );
         console.log('AFTER:', after[0]);
-        
+
         if (after[0].approval_status === 'rejected') {
             console.log(' SUCCESS: Event rejected!');
             res.json({
@@ -676,12 +676,12 @@ export const rejectEvent = async (req, res) => {
                 message: 'Failed to update status'
             });
         }
-        
+
     } catch (error) {
         console.error('ERROR:', error.message);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 };
@@ -935,7 +935,7 @@ export const getEventInteractions = async (req, res) => {
 
         // Check if event exists
         const [events] = await db.query('SELECT * FROM EVENT WHERE id = ?', [eventId]);
-        
+
         if (!events || events.length === 0) {
             console.log('Event not found');
             return res.status(404).json({
@@ -1035,14 +1035,14 @@ export const getEventInteractions = async (req, res) => {
             rsvps: rsvps.length,
             comments: comments.length
         });
-        
+
         res.json(response);
 
     } catch (error) {
         console.error('=== ERROR IN getEventInteractions ===');
         console.error('Error:', error);
         console.error('Stack:', error.stack);
-        
+
         res.status(500).json({
             success: false,
             message: 'Error fetching event interactions',
@@ -1103,27 +1103,27 @@ export const getUserCalendarEvents = async (req, res) => {
 // Add this function to your eventController.js
 
 export const getMyMosqueEvents = async (req, res) => {
-  try {
-    const user_id = req.user.id;
-    
-    // Get the mosque_id where this user is the admin
-    const [mosques] = await db.execute(
-      'SELECT id FROM mosque WHERE mosque_admin_id = ?',
-      [user_id]
-    );
+    try {
+        const user_id = req.user.id;
 
-    if (mosques.length === 0) {
-      return res.json({
-        success: true,
-        events: [],
-        message: 'No mosque found for this admin'
-      });
-    }
+        // Get the mosque_id where this user is the admin
+        const [mosques] = await db.execute(
+            'SELECT id FROM mosque WHERE mosque_admin_id = ?',
+            [user_id]
+        );
 
-    const mosque_id = mosques[0].id;
+        if (mosques.length === 0) {
+            return res.json({
+                success: true,
+                events: [],
+                message: 'No mosque found for this admin'
+            });
+        }
 
-    // Get all events for this mosque with aggregated data
-    const [events] = await db.execute(`
+        const mosque_id = mosques[0].id;
+
+        // Get all events for this mosque with aggregated data
+        const [events] = await db.execute(`
       SELECT 
         e.*,
         m.name as mosque_name,
@@ -1145,77 +1145,77 @@ export const getMyMosqueEvents = async (req, res) => {
       ORDER BY e.event_date DESC
     `, [mosque_id]);
 
-    res.json({
-      success: true,
-      events: events
-    });
+        res.json({
+            success: true,
+            events: events
+        });
 
-  } catch (error) {
-    console.error('Error fetching mosque events:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch events'
-    });
-  }
+    } catch (error) {
+        console.error('Error fetching mosque events:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch events'
+        });
+    }
 };
 
 // Mark event as completed (Admin only)
 export const markEventCompleted = async (req, res) => {
-  try {
-    const { id } = req.params;  // ✅ Changed from event_id to id
-    const user_id = req.user.id;
+    try {
+        const { id } = req.params;  // ✅ Changed from event_id to id
+        const user_id = req.user.id;
 
-    console.log('📝 Mark event as completed:', { id, user_id });
+        console.log('📝 Mark event as completed:', { id, user_id });
 
-    // Get event and verify admin
-    const [events] = await db.execute(
-      `SELECT e.*, m.mosque_admin_id 
+        // Get event and verify admin
+        const [events] = await db.execute(
+            `SELECT e.*, m.mosque_admin_id 
        FROM event e 
        JOIN mosque m ON e.mosque_id = m.id 
        WHERE e.id = ?`,
-      [id]  // ✅ Use id here
-    );
+            [id]  // ✅ Use id here
+        );
 
-    if (events.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Event not found' 
-      });
-    }
+        if (events.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Event not found'
+            });
+        }
 
-    const event = events[0];
+        const event = events[0];
 
-    // Verify user is the mosque admin
-    if (Number(event.mosque_admin_id) !== Number(user_id)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Only mosque admin can mark events as completed' 
-      });
-    }
+        // Verify user is the mosque admin
+        if (Number(event.mosque_admin_id) !== Number(user_id)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Only mosque admin can mark events as completed'
+            });
+        }
 
-    // Update event status to completed
-    await db.execute(
-      `UPDATE event 
+        // Update event status to completed
+        await db.execute(
+            `UPDATE event 
        SET status = 'completed' 
        WHERE id = ?`,
-      [id]  // ✅ Use id here
-    );
+            [id]  // ✅ Use id here
+        );
 
-    console.log('✅ Event marked as completed');
+        console.log('✅ Event marked as completed');
 
-    res.json({
-      success: true,
-      message: 'Event marked as completed successfully'
-    });
+        res.json({
+            success: true,
+            message: 'Event marked as completed successfully'
+        });
 
-  } catch (error) {
-    console.error('Error marking event as completed:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to mark event as completed',
-      error: error.message 
-    });
-  }
+    } catch (error) {
+        console.error('Error marking event as completed:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to mark event as completed',
+            error: error.message
+        });
+    }
 };
 
 // ============================================
@@ -1249,10 +1249,10 @@ export const markEventCompleted = async (req, res) => {
 export const getEventsFromEnrolledMosques = async (req, res) => {
     try {
         const userId = req.user.id;
-        
+
         console.log('=== GET ENROLLED MOSQUE EVENTS ===');
         console.log('User ID:', userId);
-        
+
         // ✅ FIXED: Now includes ALL interaction data like getEvents()
         const [events] = await db.execute(`
             SELECT DISTINCT
@@ -1328,7 +1328,7 @@ export const getEventsFromEnrolledMosques = async (req, res) => {
 export const getEnrolledMosquesEventCount = async (req, res) => {
     try {
         const userId = req.user.id;
-        
+
         const [result] = await db.execute(`
             SELECT COUNT(DISTINCT e.id) as event_count
             FROM event e
@@ -1373,22 +1373,22 @@ export const getEnrolledMosquesEventCount = async (req, res) => {
 export const getEventsFromTeachingMosque = async (req, res) => {
     try {
         const userId = req.user.id;
-        
+
         console.log('=== GET TEACHING MOSQUE EVENTS ===');
         console.log('Teacher User ID:', userId);
-        
+
         // First, check if teacher has any courses assigned
         const [teacherCourses] = await db.execute(`
             SELECT id, name, mosque_id 
             FROM course 
             WHERE teacher_id = ?
         `, [userId]);
-        
+
         console.log('Teacher courses found:', teacherCourses.length);
         if (teacherCourses.length > 0) {
             console.log('Teacher courses:', teacherCourses);
         }
-        
+
         // If no courses found, return empty result with helpful message
         if (teacherCourses.length === 0) {
             console.log('⚠️ No courses found for this teacher');
@@ -1399,10 +1399,10 @@ export const getEventsFromTeachingMosque = async (req, res) => {
                 message: 'No courses assigned to this teacher yet'
             });
         }
-        
+
         // Get unique mosque IDs
         const mosqueIds = [...new Set(teacherCourses.map(c => c.mosque_id).filter(id => id !== null))];
-        
+
         if (mosqueIds.length === 0) {
             console.log('⚠️ Teacher courses have no mosque assigned');
             return res.status(200).json({
@@ -1412,9 +1412,9 @@ export const getEventsFromTeachingMosque = async (req, res) => {
                 message: 'Teacher courses are not assigned to any mosque yet'
             });
         }
-        
+
         console.log('Mosque IDs where teacher teaches:', mosqueIds);
-        
+
         // Get events from mosques where teacher teaches
         const [events] = await db.execute(`
             SELECT DISTINCT
@@ -1489,10 +1489,10 @@ export const getEventsFromTeachingMosque = async (req, res) => {
 export const getTeachingMosqueEventCount = async (req, res) => {
     try {
         const userId = req.user.id;
-        
+
         console.log('=== GET TEACHING MOSQUE EVENT COUNT ===');
         console.log('Teacher User ID:', userId);
-        
+
         // First check if teacher has courses
         const [teacherCourses] = await db.execute(`
             SELECT COUNT(*) as course_count,
@@ -1501,9 +1501,9 @@ export const getTeachingMosqueEventCount = async (req, res) => {
             WHERE teacher_id = ?
             AND mosque_id IS NOT NULL
         `, [userId]);
-        
+
         console.log('Teacher has:', teacherCourses[0]);
-        
+
         // If no courses, return 0
         if (teacherCourses[0].course_count === 0) {
             return res.status(200).json({
@@ -1512,7 +1512,7 @@ export const getTeachingMosqueEventCount = async (req, res) => {
                 message: 'No courses assigned to this teacher'
             });
         }
-        
+
         // Get event count
         const [result] = await db.execute(`
             SELECT COUNT(DISTINCT e.id) as event_count

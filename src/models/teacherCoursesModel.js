@@ -86,7 +86,7 @@ export const TeacherCoursesModel = {
             FROM ENROLLMENT e
             JOIN USER u ON e.student_id = u.id
             LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
-            WHERE e.course_id = ? AND e.status = 'active'
+            WHERE e.course_id = ? AND (e.status = 'active' OR e.status = 'completed')
             ORDER BY u.full_name ASC
         `, [courseId]);
 
@@ -137,7 +137,7 @@ export const TeacherCoursesModel = {
             JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
             JOIN USER u ON e.student_id = u.id
             LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
-            WHERE c.teacher_id = ? AND e.status = 'active'
+            WHERE c.teacher_id = ? AND (e.status = 'active' OR e.status = 'completed')
         `;
 
         const params = [teacherId];

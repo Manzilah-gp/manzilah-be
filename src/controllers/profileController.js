@@ -257,8 +257,8 @@ async function getStudentData(userId) {
             totalSessions += parseInt(enrollment.total_attendance_records) || 0;
         });
 
-        const attendanceRate = totalSessions > 0 
-            ? Math.round((totalPresent / totalSessions) * 100) 
+        const attendanceRate = totalSessions > 0
+            ? Math.round((totalPresent / totalSessions) * 100)
             : 0;
 
         return {
@@ -314,7 +314,7 @@ async function getTeacherData(userId) {
             SELECT COUNT(DISTINCT e.student_id) as current_students
             FROM ENROLLMENT e
             JOIN COURSE c ON e.course_id = c.id
-            WHERE c.teacher_id = ? AND e.status = 'active'
+            WHERE c.teacher_id = ? AND (e.status = 'active' OR e.status = 'completed')
         `, [userId]);
 
         // Get completed courses
@@ -361,7 +361,7 @@ async function getParentData(userId) {
                 COUNT(DISTINCT e.course_id) as courses
             FROM PARENT_CHILD_RELATIONSHIP pcr
             JOIN USER u ON pcr.child_id = u.id
-            LEFT JOIN ENROLLMENT e ON u.id = e.student_id AND e.status = 'active'
+            LEFT JOIN ENROLLMENT e ON u.id = e.student_id AND (e.status = 'active' OR e.status = 'completed')
             WHERE pcr.parent_id = ? AND pcr.is_verified = TRUE
             GROUP BY u.id, u.full_name, u.dob
         `, [userId]);
@@ -380,7 +380,7 @@ async function getParentData(userId) {
                 JOIN COURSE c ON e.course_id = c.id
                 JOIN COURSE_TYPE ct ON c.course_type_id = ct.id
                 LEFT JOIN STUDENT_PROGRESS sp ON e.id = sp.enrollment_id
-                WHERE e.student_id = ? AND e.status = 'active'
+                WHERE e.student_id = ? AND (e.status = 'active' OR e.status = 'completed')
             `, [child.id]);
 
             let totalProgress = 0;
@@ -401,8 +401,8 @@ async function getParentData(userId) {
                 enrollmentCount++;
             });
 
-            child.progress = enrollmentCount > 0 
-                ? Math.round(totalProgress / enrollmentCount) 
+            child.progress = enrollmentCount > 0
+                ? Math.round(totalProgress / enrollmentCount)
                 : 0;
         }
 

@@ -1,6 +1,7 @@
 import { CourseModel } from "../models/CourseModel.js";
 import { TeacherSuggestionModel } from "../models/TeacherSuggestionModel.js";
 import { StatisticsModel } from "../models/statisticsModel.js"
+import { notifyUser } from './firebaseNotificationController.js';
 /**
  * @desc    Get all course types
  * @route   GET /api/courses/types
@@ -261,6 +262,11 @@ export const assignTeacherToCourse = async (req, res) => {
         // Assign teacher (this would typically involve creating an enrollment or assignment record)
         // For now, we'll use the CourseModel's assignTeacher method
         const assigned = await CourseModel.assignTeacher(courseId, teacherId, user.id);
+
+        await notifyUser(teacherId, {
+            title: "Teacher assigned to course",
+            body: `You have been assigned to a new course check it out`
+        });
 
         if (assigned) {
             res.status(200).json({

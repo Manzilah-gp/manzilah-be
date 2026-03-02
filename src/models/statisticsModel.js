@@ -207,7 +207,7 @@ export const StatisticsModel = {
             FROM ENROLLMENT e
             JOIN COURSE c ON e.course_id = c.id
             WHERE c.mosque_id = ? 
-            AND e.status = 'active'
+            AND (e.status = 'active' OR e.status = 'completed')
         `, [mosqueId]);
 
         return rows[0].count;
